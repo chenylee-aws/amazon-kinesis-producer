@@ -30,9 +30,9 @@ CA_CERT="https://curl.se/ca/cacert.pem"
 INSTALL_DIR=$(pwd)/third_party
 
 # Cleanup any earlier version of the third party directory and links to it.
-rm -f b2
-rm -rf $INSTALL_DIR
-mkdir -p $INSTALL_DIR
+# rm -f b2
+# rm -rf $INSTALL_DIR
+# mkdir -p $INSTALL_DIR
 
 #Figure out the release type from os. The release type will be used to determine the final storage location
 # of the native binary
@@ -117,124 +117,124 @@ function conf {
   fi
 }
 
-# OpenSSL
-if [ ! -d "openssl-${OPENSSL_VERSION}" ]; then
+# # OpenSSL
+# if [ ! -d "openssl-${OPENSSL_VERSION}" ]; then
 
-  _curl "$LIB_OPENSSL" >openssl.tgz
-  tar xf openssl.tgz
-  rm openssl.tgz
+#   _curl "$LIB_OPENSSL" >openssl.tgz
+#   tar xf openssl.tgz
+#   rm openssl.tgz
 
-  cd openssl-${OPENSSL_VERSION}
-  OPTS="threads no-shared no-idea no-camellia no-seed no-bf no-cast no-rc2 no-rc5 no-md2 no-mdc2 no-ssl2 no-ssl3 no-capieng no-dso"
+#   cd openssl-${OPENSSL_VERSION}
+#   OPTS="threads no-shared no-idea no-camellia no-seed no-bf no-cast no-rc2 no-rc5 no-md2 no-mdc2 no-ssl2 no-ssl3 no-capieng no-dso"
 
-  if [[ $(uname) == 'Darwin' ]]; then
-    OPTS="$OPTS darwin64-x86_64-cc enable-ec_nistp_64_gcc_128"
-    silence ./Configure $OPTS --prefix="$INSTALL_DIR"
-  elif [[ $(uname) == MINGW* ]]; then
-    silence ./Configure mingw64 $OPTS --prefix="$INSTALL_DIR"
-    find ./ -name Makefile | while read f; do
-      echo >>"$f"
-      echo "%.o: %.c" >>"$f"
-      echo -e '\t$(COMPILE.c) $(OUTPUT_OPTION) $<;' >>$f
-    done
-  else
-    silence ./config $OPTS --prefix="$INSTALL_DIR"
-  fi
+#   if [[ $(uname) == 'Darwin' ]]; then
+#     OPTS="$OPTS darwin64-x86_64-cc enable-ec_nistp_64_gcc_128"
+#     silence ./Configure $OPTS --prefix="$INSTALL_DIR"
+#   elif [[ $(uname) == MINGW* ]]; then
+#     silence ./Configure mingw64 $OPTS --prefix="$INSTALL_DIR"
+#     find ./ -name Makefile | while read f; do
+#       echo >>"$f"
+#       echo "%.o: %.c" >>"$f"
+#       echo -e '\t$(COMPILE.c) $(OUTPUT_OPTION) $<;' >>$f
+#     done
+#   else
+#     silence ./config $OPTS --prefix="$INSTALL_DIR"
+#   fi
 
-  silence make depend
-  silence make # don't use -j, doesn't work half the time
-  silence make install
+#   silence make depend
+#   silence make # don't use -j, doesn't work half the time
+#   silence make install
 
-  cd ..
-fi
+#   cd ..
+# fi
 
-# Boost C++ Libraries
-if [ ! -d "boost_${BOOST_VERSION_UNDERSCORED}" ]; then
-  _curl "$LIB_BOOST" >boost.tgz
-  tar xf boost.tgz
-  rm boost.tgz
+# # Boost C++ Libraries
+# if [ ! -d "boost_${BOOST_VERSION_UNDERSCORED}" ]; then
+#   _curl "$LIB_BOOST" >boost.tgz
+#   tar xf boost.tgz
+#   rm boost.tgz
 
-  cd boost_${BOOST_VERSION_UNDERSCORED}
+#   cd boost_${BOOST_VERSION_UNDERSCORED}
 
-  LIBS="atomic,chrono,log,system,test,random,regex,thread,filesystem"
-  OPTS="-j 8 --build-type=minimal --layout=system --prefix=$INSTALL_DIR link=static threading=multi release install"
+#   LIBS="atomic,chrono,log,system,test,random,regex,thread,filesystem"
+#   OPTS="-j 8 --build-type=minimal --layout=system --prefix=$INSTALL_DIR link=static threading=multi release install"
 
-  if [[ $(uname) == 'Darwin' ]]; then
-    silence ./bootstrap.sh --with-libraries=$LIBS --with-toolset=clang
-    silence ./b2 toolset=clang-darwin $OPTS cxxflags="$MACOSX_MIN_COMPILER_OPT"
-  elif [[ $(uname) == MINGW* ]]; then
-    silence ./bootstrap.sh --with-libraries=$LIBS --with-toolset=mingw
-    sed -i 's/\bmingw\b/gcc/' project-config.jam
-    silence ./b2 $OPTS
-  else
-    if [ "$1" == "clang" ]; then
-      silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=clang
-      silence ./b2 toolset=clang $OPTS cxxflags="$CXXFLAGS" linkflags="$LDFLAGS"
-    else
-      silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
-      silence ./b2 toolset=gcc $OPTS
-    fi
-  fi
+#   if [[ $(uname) == 'Darwin' ]]; then
+#     silence ./bootstrap.sh --with-libraries=$LIBS --with-toolset=clang
+#     silence ./b2 toolset=clang-darwin $OPTS cxxflags="$MACOSX_MIN_COMPILER_OPT"
+#   elif [[ $(uname) == MINGW* ]]; then
+#     silence ./bootstrap.sh --with-libraries=$LIBS --with-toolset=mingw
+#     sed -i 's/\bmingw\b/gcc/' project-config.jam
+#     silence ./b2 $OPTS
+#   else
+#     if [ "$1" == "clang" ]; then
+#       silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=clang
+#       silence ./b2 toolset=clang $OPTS cxxflags="$CXXFLAGS" linkflags="$LDFLAGS"
+#     else
+#       silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
+#       silence ./b2 toolset=gcc $OPTS
+#     fi
+#   fi
 
-  cd ..
-fi
+#   cd ..
+# fi
 
-# zlib
-if [ ! -d "zlib-${ZLIB_VERSION}" ]; then
-  _curl "$LIB_ZLIB" >zlib.tgz
-  tar xf zlib.tgz
-  rm zlib.tgz
+# # zlib
+# if [ ! -d "zlib-${ZLIB_VERSION}" ]; then
+#   _curl "$LIB_ZLIB" >zlib.tgz
+#   tar xf zlib.tgz
+#   rm zlib.tgz
 
-  cd zlib-${ZLIB_VERSION}
-  silence ./configure --static --prefix="$INSTALL_DIR"
-  silence make -j
-  silence make install
+#   cd zlib-${ZLIB_VERSION}
+#   silence ./configure --static --prefix="$INSTALL_DIR"
+#   silence make -j
+#   silence make install
 
-  cd ..
-fi
+#   cd ..
+# fi
 
-# Google Protocol Buffers
-if [ ! -d "protobuf-${PROTOBUF_VERSION}" ]; then
-  _curl "$LIB_PROTOBUF" >protobuf.tgz
-  tar xf protobuf.tgz
-  rm protobuf.tgz
+# # Google Protocol Buffers
+# if [ ! -d "protobuf-${PROTOBUF_VERSION}" ]; then
+#   _curl "$LIB_PROTOBUF" >protobuf.tgz
+#   tar xf protobuf.tgz
+#   rm protobuf.tgz
 
-  cd protobuf-${PROTOBUF_VERSION}
-  silence conf --enable-shared=no
-  silence make -j 4
-  silence make install
+#   cd protobuf-${PROTOBUF_VERSION}
+#   silence conf --enable-shared=no
+#   silence make -j 4
+#   silence make install
 
-  cd ..
-fi
+#   cd ..
+# fi
 
-# libcurl
-if [ ! -d "curl-${CURL_VERSION}" ]; then
-  _curl "$LIB_CURL" >curl.tgz
-  tar xf curl.tgz
-  rm curl.tgz
+# # libcurl
+# if [ ! -d "curl-${CURL_VERSION}" ]; then
+#   _curl "$LIB_CURL" >curl.tgz
+#   tar xf curl.tgz
+#   rm curl.tgz
 
-  cd curl-${CURL_VERSION}
+#   cd curl-${CURL_VERSION}
 
-  if [[ $(uname) == 'Darwin' ]]; then
-    silence conf --with-openssl --enable-threaded-resolver \
-      --disable-shared --disable-ldap --disable-ldaps --disable-debug \
-      --without-libidn2 --without-libssh2 --without-ca-bundle \
-      --without-brotli --without-nghttp2 --without-librtmp --without-zstd
-    # Apply a patch for macOS that should prevent curl from trying to use clock_gettime
-    # This is a temporary work around for https://github.com/awslabs/amazon-kinesis-producer/issues/117
-    # until dependencies are updated
-    #
-    sed -Ei .bak 's/#define HAVE_CLOCK_GETTIME_MONOTONIC 1//' lib/curl_config.h
-  else
-    silence conf --disable-shared --disable-ldap --disable-ldaps --without-libidn2 \
-      --enable-threaded-resolver --disable-debug --without-libssh2 --without-ca-bundle --with-ssl="${INSTALL_DIR}" --without-libidn
-  fi
+#   if [[ $(uname) == 'Darwin' ]]; then
+#     silence conf --with-openssl --enable-threaded-resolver \
+#       --disable-shared --disable-ldap --disable-ldaps --disable-debug \
+#       --without-libidn2 --without-libssh2 --without-ca-bundle \
+#       --without-brotli --without-nghttp2 --without-librtmp --without-zstd
+#     # Apply a patch for macOS that should prevent curl from trying to use clock_gettime
+#     # This is a temporary work around for https://github.com/awslabs/amazon-kinesis-producer/issues/117
+#     # until dependencies are updated
+#     #
+#     sed -Ei .bak 's/#define HAVE_CLOCK_GETTIME_MONOTONIC 1//' lib/curl_config.h
+#   else
+#     silence conf --disable-shared --disable-ldap --disable-ldaps --without-libidn2 \
+#       --enable-threaded-resolver --disable-debug --without-libssh2 --without-ca-bundle --with-ssl="${INSTALL_DIR}" --without-libidn
+#   fi
 
-  silence make -j
-  silence make install
+#   silence make -j
+#   silence make install
 
-  cd ..
-fi
+#   cd ..
+# fi
 
 # AWS C++ SDK
 if [ ! -d "aws-sdk-cpp" ]; then
