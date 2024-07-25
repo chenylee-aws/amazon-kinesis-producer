@@ -22,6 +22,7 @@
 #include <boost/optional/optional_io.hpp>
 
 #include <aws/kinesis/KinesisClient.h>
+#include <aws/kinesis/model/Shard.h>
 #include <aws/metrics/metrics_manager.h>
 #include <aws/mutex.h>
 #include <aws/utils/utils.h>
@@ -85,6 +86,7 @@ class ShardMap : boost::noncopyable {
   void clear_all_stored_shards();
   void store_open_shard(const uint64_t shard_id, const uint128_t end_hash_key);
   void sort_all_open_shards();
+  void build_minimal_disjoint_hashranges();
 
   std::shared_ptr<aws::utils::Executor> executor_;
   std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
@@ -95,6 +97,7 @@ class ShardMap : boost::noncopyable {
   State state_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
   std::vector<uint64_t> open_shard_ids_;
+  std::vector<Aws::Kinesis::Model::Shard> open_shards;
   Mutex mutex_;
   TimePoint updated_at_;
   std::chrono::milliseconds min_backoff_;

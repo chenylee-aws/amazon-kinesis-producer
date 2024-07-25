@@ -130,8 +130,9 @@ void ShardMap::list_shards_callback(
   auto& shards = outcome.GetResult().GetShards();  
   for (auto& shard : shards) {
     // We use shard filter for server end to filter out closed shards
-    store_open_shard(shard_id_from_str(shard.GetShardId()), 
-      uint128_t(shard.GetHashKeyRange().GetEndingHashKey()));
+    // store_open_shard(shard_id_from_str(shard.GetShardId()), 
+    //   uint128_t(shard.GetHashKeyRange().GetEndingHashKey()));
+    open_shards.push_back(shard);
   }
 
   backoff_ = min_backoff_;
@@ -142,7 +143,8 @@ void ShardMap::list_shards_callback(
     return;
   }
 
-  sort_all_open_shards();
+  // sort_all_open_shards();
+  build_minimal_disjoint_hashranges();
 
   WriteLock lock(mutex_);
   state_ = READY;
@@ -192,6 +194,58 @@ void ShardMap::sort_all_open_shards() {
   std::sort(open_shard_ids_.begin(), open_shard_ids_.end());
 }
 
+void ShardMap::build_minimal_disjoint_hashranges() {
+  if (open_shards.empty()) {
+      return;
+  }
+  
+  // Sort shards by starting hashkey then by ending hashkey 
+  std::sort(open_shards.begin(), open_shards.end(), [](const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
+      const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());
+      const uint128_t startB = uint128_t(b.GetHashKeyRange().GetStartingHashKey());
+      const uint128_t endA = uint128_t(a.GetHashKeyRange().GetEndingHashKey());
+      const uint128_t endB = uint128_t(b.GetHashKeyRange().GetEndingHashKey());
+      return (startA < startB) || (startA == startB && endA < endB);
+  });
+
+  uint128_t lastEndingHashKey = 0;
+  for (const auto& shard : open_shards) {
+      const auto& range = shard.GetHashKeyRange();
+      const uint128_t  start = uint128_t(range.GetStartingHashKey());
+      const uint128_t end = uint128_t(range.GetEndingHashKey());
+
+      if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
+        store_open_shard(shard_id_from_str(shard.GetShardId()), uint128_t(end));
+        lastEndingHashKey = end;
+      }
+  }
+}
+
+// void ShardMap::build_minimal_disjoint_hashranges(std::vector<std::pair<uint128_t, uint128_t>>& hashranges) {
+//   std::vector<pair<uint128_t, uint128_t>> result;
+
+//   if (hashranges.empty()) {
+//       return result;
+//   }
+
+//   sort(hashranges.begin(), hashranges.end(), [](const pair<uint128_t, uint128_t>& a, const pair<uint128_t, uint128_t>& b) {
+//       return (a.first < b.first) || (a.first == b.first && a.second < b.second);
+//   });
+
+//   // Track the end of the last added interval
+//   uint128_t last_hash_end = -1;
+
+//   for (const auto& hashrange : hashranges) {
+//       const uint128_t hash_start = hashrange.first;
+//       const uint128_t hash_end = hashrange.second;
+
+//       // Only add interval if it starts after the last added interval's end
+//       if (hash_start > last_hash_end) {
+//           result.emplace_back(hash_start, end);
+//           lastEnd = end;
+//       }
+//   }
+// }
 
 } //namespace core
 } //namespace kinesis
