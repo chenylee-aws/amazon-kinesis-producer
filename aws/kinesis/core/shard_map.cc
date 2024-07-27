@@ -198,7 +198,7 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   if (open_shards.empty()) {
       return;
   }
-  
+  LOG(info) << "Sorting into buckets";
   // Sort shards by starting hashkey then by ending hashkey 
   std::sort(open_shards.begin(), open_shards.end(), [](const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
       const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());

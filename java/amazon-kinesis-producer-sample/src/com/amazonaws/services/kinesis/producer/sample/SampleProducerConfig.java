@@ -272,6 +272,8 @@ public class SampleProducerConfig {
         // shell script, or set them for the Java process, which will then pass
         // them on to the child process.
         // config.setNativeExecutable("my_directory/kinesis_producer");
+        config.setNativeExecutable("/Users/chenyuanlee/workspace/kpl/java/amazon-kinesis-producer/src/main/resources/amazon-kinesis-producer-native-binaries/osx/kinesis_producer");
+
 
         // If you end up using the default configuration (a Configuration instance
         // without any calls to set*), you can just leave the config argument
