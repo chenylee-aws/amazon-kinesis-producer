@@ -196,6 +196,8 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
                                        const std::string& sequence_number,
                                        const bool should_invalidate_on_incorrect_shard) {
   const uint64_t actual_shard = ShardMap::shard_id_from_str(shard_id);
+  boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_->shard(actual_shard);
+
   if (ur->predicted_shard() &&
       *ur->predicted_shard() != actual_shard) {
     //We should call invalidate only if:
@@ -203,26 +205,43 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
     if (should_invalidate_on_incorrect_shard) {
       LOG(warning) << "Record went to shard " << shard_id << " instead of the "
                    << "predicted shard " << *ur->predicted_shard() << "; this "
-                   << "usually means the sharp map has changed.";    
+                   << "usually means the sharp map has changed.";   
 
       shard_map_invalidate_cb_(start, ur->predicted_shard());
     }
 
-    retry_not_expired(ur,
-                      start,
-                      end,
-                      "Wrong Shard",
-                      "Record did not end up in expected shard.");
-    return false;
-  } else {
-    finish_user_record(
-        ur,
-        Attempt()
-            .set_start(start)
-            .set_end(end)
-            .set_result(shard_id, sequence_number));
-    return true;
+    if (!shard) {
+      retry_not_expired(ur,
+                        start,
+                        end,
+                        "Wrong Shard",
+                        "Record did not end up in expected shard.");
+      return false;
+    }
+    // Access the shard object
+    const auto& shard_obj = *shard;
+    // comparing the hashrange between the actual shard and the record.
+    if (uint128_t(shard_obj.GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
+      uint128_t(shard_obj.GetHashKeyRange().GetEndingHashKey())>= ur->hash_key()) {
+        LOG(info) << "Record went to shard " << shard_id << " instead of the "
+            << "predicted shard " << *ur->predicted_shard() << "; the hashrange of "
+            << "the actual shard covers that of the predicted shard. Marking this record as success.";   
+    } else {
+      retry_not_expired(ur,
+                start,
+                end,
+                "Wrong Shard",
+                "Record did not end up in expected shard.");
+      return false;
+    }
   }
+  finish_user_record(
+      ur,
+      Attempt()
+          .set_start(start)
+          .set_end(end)
+          .set_result(shard_id, sequence_number));
+  return true;
 }
 
 void Retrier::finish_user_record(const std::shared_ptr<UserRecord>& ur,

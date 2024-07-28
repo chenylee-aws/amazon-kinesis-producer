@@ -46,6 +46,7 @@ class ShardMap : boost::noncopyable {
            std::chrono::milliseconds max_backoff = kMaxBackoff);
 
   virtual boost::optional<uint64_t> shard_id(const uint128_t& hash_key);
+  boost::optional<Aws::Kinesis::Model::Shard> shard(const uint64_t& actual_shard);
 
   void invalidate(const TimePoint& seen_at, const boost::optional<uint64_t> predicted_shard);
 
@@ -98,6 +99,7 @@ class ShardMap : boost::noncopyable {
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
   std::vector<uint64_t> open_shard_ids_;
   std::vector<Aws::Kinesis::Model::Shard> open_shards;
+  std::map<uint64_t, Aws::Kinesis::Model::Shard> open_shard_id_to_shard;
   Mutex mutex_;
   TimePoint updated_at_;
   std::chrono::milliseconds min_backoff_;

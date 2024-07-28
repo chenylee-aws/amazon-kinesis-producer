@@ -22,6 +22,7 @@
 #include <aws/kinesis/core/put_records_context.h>
 #include <aws/kinesis/core/put_records_request.h>
 #include <aws/kinesis/core/shard_map.h>
+#include <aws/kinesis/model/Shard.h>
 #include <aws/metrics/metrics_manager.h>
 
 namespace aws {
@@ -53,6 +54,7 @@ class MetricsPutter {
 
 class Retrier {
  public:
+  using uint128_t = boost::multiprecision::uint128_t;
   using Configuration = aws::kinesis::core::Configuration;
   using TimePoint = std::chrono::steady_clock::time_point;
  // using Result = std::shared_ptr<aws::http::HttpResult>;
@@ -65,6 +67,7 @@ class Retrier {
   Retrier(std::shared_ptr<Configuration> config,
           UserRecordCallback finish_cb,
           UserRecordCallback retry_cb,
+          const std::shared_ptr<ShardMap> shard_map,
           ShardMapInvalidateCallback shard_map_invalidate_cb,
           ErrorCallback error_cb = ErrorCallback(),
           std::shared_ptr<aws::metrics::MetricsManager> metrics_manager =
@@ -74,7 +77,8 @@ class Retrier {
         retry_cb_(retry_cb),
         shard_map_invalidate_cb_(shard_map_invalidate_cb),
         error_cb_(error_cb),
-        metrics_manager_(metrics_manager) {}
+        metrics_manager_(metrics_manager),
+        shard_map_(shard_map) {}
 
   void put(std::shared_ptr<PutRecordsContext> prc) {
     handle_put_records_result(std::move(prc));
@@ -134,6 +138,7 @@ class Retrier {
   ShardMapInvalidateCallback shard_map_invalidate_cb_;
   ErrorCallback error_cb_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
+  std::shared_ptr<ShardMap> shard_map_;
 };
 
 } //namespace core

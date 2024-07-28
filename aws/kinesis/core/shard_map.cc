@@ -65,6 +65,14 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
   return boost::none;
 }
 
+boost::optional<Aws::Kinesis::Model::Shard> ShardMap::shard(const uint64_t& actual_shard) {
+  // Use find to avoid inserting a new element if the key is not found
+  auto it = open_shard_id_to_shard.find(actual_shard);
+  if (it != open_shard_id_to_shard.end()) {
+      return it->second;
+  }
+  return boost::none;
+}
 
 
 void ShardMap::invalidate(const TimePoint& seen_at, const boost::optional<uint64_t> predicted_shard) {
@@ -210,8 +218,9 @@ void ShardMap::build_minimal_disjoint_hashranges() {
 
   uint128_t lastEndingHashKey = 0;
   for (const auto& shard : open_shards) {
+      open_shard_id_to_shard.insert({shard_id_from_str(shard.GetShardId()), shard});
       const auto& range = shard.GetHashKeyRange();
-      const uint128_t  start = uint128_t(range.GetStartingHashKey());
+      const uint128_t start = uint128_t(range.GetStartingHashKey());
       const uint128_t end = uint128_t(range.GetEndingHashKey());
 
       if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
@@ -220,32 +229,6 @@ void ShardMap::build_minimal_disjoint_hashranges() {
       }
   }
 }
-
-// void ShardMap::build_minimal_disjoint_hashranges(std::vector<std::pair<uint128_t, uint128_t>>& hashranges) {
-//   std::vector<pair<uint128_t, uint128_t>> result;
-
-//   if (hashranges.empty()) {
-//       return result;
-//   }
-
-//   sort(hashranges.begin(), hashranges.end(), [](const pair<uint128_t, uint128_t>& a, const pair<uint128_t, uint128_t>& b) {
-//       return (a.first < b.first) || (a.first == b.first && a.second < b.second);
-//   });
-
-//   // Track the end of the last added interval
-//   uint128_t last_hash_end = -1;
-
-//   for (const auto& hashrange : hashranges) {
-//       const uint128_t hash_start = hashrange.first;
-//       const uint128_t hash_end = hashrange.second;
-
-//       // Only add interval if it starts after the last added interval's end
-//       if (hash_start > last_hash_end) {
-//           result.emplace_back(hash_start, end);
-//           lastEnd = end;
-//       }
-//   }
-// }
 
 } //namespace core
 } //namespace kinesis
