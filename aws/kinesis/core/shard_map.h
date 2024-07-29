@@ -97,9 +97,8 @@ class ShardMap : boost::noncopyable {
 
   State state_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
-  std::vector<uint64_t> open_shard_ids_;
   std::vector<Aws::Kinesis::Model::Shard> open_shards;
-  std::map<uint64_t, Aws::Kinesis::Model::Shard> open_shard_id_to_shard;
+  std::map<uint64_t, std::pair<Aws::Kinesis::Model::Shard, std::chrono::time_point<std::chrono::steady_clock>>> shard_id_to_shard_;
   Mutex mutex_;
   TimePoint updated_at_;
   std::chrono::milliseconds min_backoff_;

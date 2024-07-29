@@ -219,10 +219,10 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
       return false;
     }
     // Access the shard object
-    const auto& shard_obj = *shard;
+    // const auto& shard_obj = *shard;
     // comparing the hashrange between the actual shard and the record.
-    if (uint128_t(shard_obj.GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
-      uint128_t(shard_obj.GetHashKeyRange().GetEndingHashKey())>= ur->hash_key()) {
+    if (uint128_t((*shard).GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
+      uint128_t((*shard).GetHashKeyRange().GetEndingHashKey())>= ur->hash_key()) {
         LOG(info) << "Record went to shard " << shard_id << " instead of the "
             << "predicted shard " << *ur->predicted_shard() << "; the hashrange of "
             << "the actual shard covers that of the predicted shard. Marking this record as success.";   

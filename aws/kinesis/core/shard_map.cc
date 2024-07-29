@@ -67,9 +67,9 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
 
 boost::optional<Aws::Kinesis::Model::Shard> ShardMap::shard(const uint64_t& actual_shard) {
   // Use find to avoid inserting a new element if the key is not found
-  auto it = open_shard_id_to_shard.find(actual_shard);
-  if (it != open_shard_id_to_shard.end()) {
-      return it->second;
+  auto it = shard_id_to_shard_.find(actual_shard);
+  if (it != shard_id_to_shard_.end()) {
+      return it->second.first;
   }
   return boost::none;
 }
@@ -79,7 +79,7 @@ void ShardMap::invalidate(const TimePoint& seen_at, const boost::optional<uint64
   WriteLock lock(mutex_);
   
   if (seen_at > updated_at_ && state_ == READY) {
-    if (!predicted_shard || std::binary_search(open_shard_ids_.begin(), open_shard_ids_.end(), *predicted_shard)) {
+    if (!predicted_shard || (shard_id_to_shard_.find(*predicted_shard) != shard_id_to_shard_.end())) {
       std::chrono::duration<double, std::milli> fp_ms = seen_at - updated_at_;
       LOG(info) << "Deciding to update shard map for \"" << stream_ 
                 <<"\" with a gap between seen_at and updated_at_ of " << fp_ms.count() << " ms " << "predicted shard: " << predicted_shard;
@@ -187,19 +187,16 @@ void ShardMap::update_fail(const std::string &code, const std::string &msg) {
 
 void ShardMap::clear_all_stored_shards() {
   end_hash_key_to_shard_id_.clear();
-  open_shard_ids_.clear();
 }
 
 void ShardMap::store_open_shard(const uint64_t shard_id, const uint128_t end_hash_key) {
   end_hash_key_to_shard_id_.push_back(
       std::make_pair(end_hash_key, shard_id));
-  open_shard_ids_.push_back(shard_id);
 }
 
 void ShardMap::sort_all_open_shards() {
   std::sort(end_hash_key_to_shard_id_.begin(),
           end_hash_key_to_shard_id_.end());
-  std::sort(open_shard_ids_.begin(), open_shard_ids_.end());
 }
 
 void ShardMap::build_minimal_disjoint_hashranges() {
@@ -217,16 +214,32 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   });
 
   uint128_t lastEndingHashKey = 0;
+  std::set<uint64_t> open_shard_ids;
   for (const auto& shard : open_shards) {
-      open_shard_id_to_shard.insert({shard_id_from_str(shard.GetShardId()), shard});
+      const auto& shard_id = shard_id_from_str(shard.GetShardId());
+      open_shard_ids.insert(shard_id);
+      shard_id_to_shard_.insert({shard_id, std::make_pair(shard, std::chrono::time_point<std::chrono::steady_clock>())});
       const auto& range = shard.GetHashKeyRange();
       const uint128_t start = uint128_t(range.GetStartingHashKey());
       const uint128_t end = uint128_t(range.GetEndingHashKey());
 
       if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
-        store_open_shard(shard_id_from_str(shard.GetShardId()), uint128_t(end));
+        store_open_shard(shard_id, uint128_t(end));
         lastEndingHashKey = end;
       }
+  }
+
+  auto now = std::chrono::steady_clock::now();
+  for (auto& entry : shard_id_to_shard_) {
+    uint64_t shard_id = entry.first;
+
+    // Check if the shard ID is in open_shards and timestamp not set already 
+    if (open_shard_ids.find(shard_id) == open_shard_ids.end() && 
+          entry.second.second == std::chrono::time_point<std::chrono::steady_clock>()) {
+      LOG(info) << "Going to mark shard to remove " << shard_id << "from the map";
+        // Update the timestamp if not found in open_shards85
+        entry.second.second = now;
+    }
   }
 }
 
