@@ -196,21 +196,22 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
                                        const std::string& sequence_number,
                                        const bool should_invalidate_on_incorrect_shard) {
   const uint64_t actual_shard = ShardMap::shard_id_from_str(shard_id);
-  boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_->shard(actual_shard);
-
   if (ur->predicted_shard() &&
       *ur->predicted_shard() != actual_shard) {
     //We should call invalidate only if:
     // 1. If we are told to invalidate on incorrect shard.
     if (should_invalidate_on_incorrect_shard) {
-      LOG(warning) << "Record went to shard " << shard_id << " instead of the "
+      LOG(warning) << "Record " << ur->source_id() << " went to shard " << shard_id << " instead of the "
                    << "predicted shard " << *ur->predicted_shard() << "; this "
                    << "usually means the sharp map has changed.";   
 
       shard_map_invalidate_cb_(start, ur->predicted_shard());
     }
-
+    // this should only happen during stream scaling where new shard hasn't been learned and 
+    // records was routed to the new shard.
+    boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_->shard(actual_shard);
     if (!shard) {
+      LOG(warning) << "Retrying record because actual shard not found yet " << ur->source_id() << actual_shard;
       retry_not_expired(ur,
                         start,
                         end,
@@ -219,14 +220,14 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
       return false;
     }
     // Access the shard object
-    // const auto& shard_obj = *shard;
     // comparing the hashrange between the actual shard and the record.
     if (uint128_t((*shard).GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
       uint128_t((*shard).GetHashKeyRange().GetEndingHashKey())>= ur->hash_key()) {
-        LOG(info) << "Record went to shard " << shard_id << " instead of the "
+        LOG(info) << "Record " << ur->source_id() << " went to shard " << shard_id << " instead of the "
             << "predicted shard " << *ur->predicted_shard() << "; the hashrange of "
             << "the actual shard covers that of the predicted shard. Marking this record as success.";   
     } else {
+      LOG(warning) << "Retrying record " << ur->source_id();
       retry_not_expired(ur,
                 start,
                 end,

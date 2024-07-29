@@ -43,7 +43,8 @@ class ShardMap : boost::noncopyable {
            std::shared_ptr<aws::metrics::MetricsManager> metrics_manager
               = std::make_shared<aws::metrics::NullMetricsManager>(),
            std::chrono::milliseconds min_backoff = kMinBackoff,
-           std::chrono::milliseconds max_backoff = kMaxBackoff);
+           std::chrono::milliseconds max_backoff = kMaxBackoff,
+           std::chrono::milliseconds closed_shard_ttl = kClosedShardTtl);
 
   virtual boost::optional<uint64_t> shard_id(const uint128_t& hash_key);
   boost::optional<Aws::Kinesis::Model::Shard> shard(const uint64_t& actual_shard);
@@ -77,6 +78,7 @@ class ShardMap : boost::noncopyable {
 
   static const std::chrono::milliseconds kMinBackoff;
   static const std::chrono::milliseconds kMaxBackoff;
+  static const std::chrono::milliseconds kClosedShardTtl;
 
   void update();
   void list_shards(const std::string& next_token = "");
@@ -104,6 +106,7 @@ class ShardMap : boost::noncopyable {
   std::chrono::milliseconds min_backoff_;
   std::chrono::milliseconds max_backoff_;
   std::chrono::milliseconds backoff_;
+  std::chrono::milliseconds closed_shard_ttl_;
   std::shared_ptr<aws::utils::ScheduledCallback> scheduled_callback_;
 };
 

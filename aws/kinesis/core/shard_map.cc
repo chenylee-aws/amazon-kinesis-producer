@@ -23,6 +23,7 @@ namespace core {
 
 const std::chrono::milliseconds ShardMap::kMinBackoff{1000};
 const std::chrono::milliseconds ShardMap::kMaxBackoff{30000};
+const std::chrono::milliseconds ShardMap::kClosedShardTtl{30000};
 
 ShardMap::ShardMap(
     std::shared_ptr<aws::utils::Executor> executor,
@@ -31,7 +32,8 @@ ShardMap::ShardMap(
     std::string stream_arn,
     std::shared_ptr<aws::metrics::MetricsManager> metrics_manager,
     std::chrono::milliseconds min_backoff,
-    std::chrono::milliseconds max_backoff)
+    std::chrono::milliseconds max_backoff,
+    std::chrono::milliseconds closed_shard_ttl)
     : executor_(std::move(executor)),
       kinesis_client_(std::move(kinesis_client)),
       stream_(std::move(stream)),
@@ -40,6 +42,7 @@ ShardMap::ShardMap(
       state_(INVALID),
       min_backoff_(min_backoff),
       max_backoff_(max_backoff),
+      closed_shard_ttl_(closed_shard_ttl),
       backoff_(min_backoff_) {
   update();
 }
@@ -79,6 +82,7 @@ void ShardMap::invalidate(const TimePoint& seen_at, const boost::optional<uint64
   WriteLock lock(mutex_);
   
   if (seen_at > updated_at_ && state_ == READY) {
+    // todo: stric the check 
     if (!predicted_shard || (shard_id_to_shard_.find(*predicted_shard) != shard_id_to_shard_.end())) {
       std::chrono::duration<double, std::milli> fp_ms = seen_at - updated_at_;
       LOG(info) << "Deciding to update shard map for \"" << stream_ 
@@ -137,9 +141,6 @@ void ShardMap::list_shards_callback(
 
   auto& shards = outcome.GetResult().GetShards();  
   for (auto& shard : shards) {
-    // We use shard filter for server end to filter out closed shards
-    // store_open_shard(shard_id_from_str(shard.GetShardId()), 
-    //   uint128_t(shard.GetHashKeyRange().GetEndingHashKey()));
     open_shards.push_back(shard);
   }
 
@@ -187,16 +188,12 @@ void ShardMap::update_fail(const std::string &code, const std::string &msg) {
 
 void ShardMap::clear_all_stored_shards() {
   end_hash_key_to_shard_id_.clear();
+  open_shards.clear();
 }
 
 void ShardMap::store_open_shard(const uint64_t shard_id, const uint128_t end_hash_key) {
   end_hash_key_to_shard_id_.push_back(
       std::make_pair(end_hash_key, shard_id));
-}
-
-void ShardMap::sort_all_open_shards() {
-  std::sort(end_hash_key_to_shard_id_.begin(),
-          end_hash_key_to_shard_id_.end());
 }
 
 void ShardMap::build_minimal_disjoint_hashranges() {
@@ -213,31 +210,38 @@ void ShardMap::build_minimal_disjoint_hashranges() {
       return (startA < startB) || (startA == startB && endA < endB);
   });
 
-  uint128_t lastEndingHashKey = 0;
+  // This is used filter out the closed shard from the shard_id_to_shard_ map.
   std::set<uint64_t> open_shard_ids;
+  uint128_t lastEndingHashKey = 0;
   for (const auto& shard : open_shards) {
       const auto& shard_id = shard_id_from_str(shard.GetShardId());
       open_shard_ids.insert(shard_id);
       shard_id_to_shard_.insert({shard_id, std::make_pair(shard, std::chrono::time_point<std::chrono::steady_clock>())});
+      
       const auto& range = shard.GetHashKeyRange();
-      const uint128_t start = uint128_t(range.GetStartingHashKey());
-      const uint128_t end = uint128_t(range.GetEndingHashKey());
+      const uint128_t& start = uint128_t(range.GetStartingHashKey());
+      const uint128_t& end = uint128_t(range.GetEndingHashKey());
 
       if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
         store_open_shard(shard_id, uint128_t(end));
         lastEndingHashKey = end;
       }
   }
+  for (auto& entry : end_hash_key_to_shard_id_) {
+     LOG(info) << "printing end_hash_key_to_shard_id_" << entry.second << " and "<< entry.first;
+  }
 
   auto now = std::chrono::steady_clock::now();
   for (auto& entry : shard_id_to_shard_) {
-    uint64_t shard_id = entry.first;
-
-    // Check if the shard ID is in open_shards and timestamp not set already 
-    if (open_shard_ids.find(shard_id) == open_shard_ids.end() && 
-          entry.second.second == std::chrono::time_point<std::chrono::steady_clock>()) {
-      LOG(info) << "Going to mark shard to remove " << shard_id << "from the map";
-        // Update the timestamp if not found in open_shards85
+    const uint64_t shard_id = entry.first;
+    // Skip if ttl is added 
+    if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
+      continue;
+    }
+    // Add ttl if shard in not open or has ending sequence number added.
+    if (open_shard_ids.find(shard_id) == open_shard_ids.end() || 
+        !entry.second.first.GetSequenceNumberRange().GetEndingSequenceNumber().empty()) {
+      LOG(info) << "Going to mark shard to remove " << shard_id << " from the map";
         entry.second.second = now;
     }
   }
