@@ -26,6 +26,7 @@
 #include <aws/metrics/metrics_manager.h>
 #include <aws/mutex.h>
 #include <aws/utils/utils.h>
+#include <thread>
 
 namespace aws {
 namespace kinesis {
@@ -90,6 +91,7 @@ class ShardMap : boost::noncopyable {
   void store_open_shard(const uint64_t shard_id, const uint128_t end_hash_key);
   void sort_all_open_shards();
   void build_minimal_disjoint_hashranges();
+  void refresh();
 
   std::shared_ptr<aws::utils::Executor> executor_;
   std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
@@ -100,8 +102,11 @@ class ShardMap : boost::noncopyable {
   State state_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
   std::vector<Aws::Kinesis::Model::Shard> open_shards;
+  std::thread cache_refreshing_thread_;
+  // the time_point is used for calculating removal time for the shard after they are closed. 
   std::map<uint64_t, std::pair<Aws::Kinesis::Model::Shard, std::chrono::time_point<std::chrono::steady_clock>>> shard_id_to_shard_;
   Mutex mutex_;
+  Mutex shard_cache_mutex_;
   TimePoint updated_at_;
   std::chrono::milliseconds min_backoff_;
   std::chrono::milliseconds max_backoff_;

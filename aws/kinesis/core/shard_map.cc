@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+#include <thread>
 #include <aws/kinesis/core/shard_map.h>
 
 #include <aws/kinesis/model/ListShardsRequest.h>
@@ -47,6 +48,8 @@ ShardMap::ShardMap(
   update();
 }
 
+// Mutex shard_cache_mutex_;
+
 boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
   ReadLock lock(mutex_, aws::defer_lock);
 
@@ -69,7 +72,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
 }
 
 boost::optional<Aws::Kinesis::Model::Shard> ShardMap::shard(const uint64_t& actual_shard) {
-  // Use find to avoid inserting a new element if the key is not found
+  ReadLock lock(shard_cache_mutex_, aws::defer_lock);
   auto it = shard_id_to_shard_.find(actual_shard);
   if (it != shard_id_to_shard_.end()) {
       return it->second.first;
@@ -213,6 +216,9 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   // This is used filter out the closed shard from the shard_id_to_shard_ map.
   std::set<uint64_t> open_shard_ids;
   uint128_t lastEndingHashKey = 0;
+  
+  WriteLock lock(shard_cache_mutex_, aws::defer_lock);
+
   for (const auto& shard : open_shards) {
       const auto& shard_id = shard_id_from_str(shard.GetShardId());
       open_shard_ids.insert(shard_id);
@@ -227,6 +233,8 @@ void ShardMap::build_minimal_disjoint_hashranges() {
         lastEndingHashKey = end;
       }
   }
+
+  //todo: remove 
   for (auto& entry : end_hash_key_to_shard_id_) {
      LOG(info) << "printing end_hash_key_to_shard_id_" << entry.second << " and "<< entry.first;
   }
@@ -243,6 +251,37 @@ void ShardMap::build_minimal_disjoint_hashranges() {
         !entry.second.first.GetSequenceNumberRange().GetEndingSequenceNumber().empty()) {
       LOG(info) << "Going to mark shard to remove " << shard_id << " from the map";
         entry.second.second = now;
+    }
+  }
+}
+
+void ShardMap::refresh() {
+  while (true) {
+    std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
+    bool is_updated = true;
+    {
+      ReadLock lock(shard_cache_mutex_, aws::defer_lock);
+      for (auto& entry : shard_id_to_shard_) {
+        if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
+          is_updated = false;
+          break;
+        }
+      }
+    }
+    if (is_updated) {
+      continue;
+    }
+    auto now = std::chrono::steady_clock::now();
+    {
+      WriteLock lock(shard_cache_mutex_, aws::defer_lock);
+      // Remove item if enough time is passed since the entry is marked for deletion. 
+      for (auto it = shard_id_to_shard_.begin(); it != shard_id_to_shard_.end(); ) {
+          if (it->second.second + closed_shard_ttl_ >= now) {
+              it = shard_id_to_shard_.erase(it); 
+          } else {
+              ++it;
+          }
+      }
     }
   }
 }
