@@ -44,8 +44,10 @@ ShardMap::ShardMap(
       min_backoff_(min_backoff),
       max_backoff_(max_backoff),
       closed_shard_ttl_(closed_shard_ttl),
-      backoff_(min_backoff_) {
+      backoff_(min_backoff_),
+      refresh_thread_(std::thread(&ShardMap::refresh, this)) {
   update();
+  refresh_thread_.detach();
 }
 
 // Mutex shard_cache_mutex_;
@@ -261,28 +263,17 @@ void ShardMap::build_minimal_disjoint_hashranges() {
 
 void ShardMap::refresh() {
   while (true) {
+    LOG(info) << "sleeping";
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
-    bool is_updated = true;
-    {
-      ReadLock lock(shard_cache_mutex_);
-      // checking to see if there is any entry that are marked 
-      for (auto& entry : shard_id_to_shard_) {
-        if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
-          is_updated = false;
-          break;
-        }
-      }
-    }
-    // skipping if map is already updated.
-    if (is_updated) {
-      continue;
-    }
     auto now = std::chrono::steady_clock::now();
     {
       WriteLock lock(shard_cache_mutex_);
-      // Remove item if enough time is passed since the entry is marked for deletion. 
+      LOG(info) << "acquired refresh lock";
+
+      // Remove item if enough time has passed since the entry is marked for deletion. 
       for (auto it = shard_id_to_shard_.begin(); it != shard_id_to_shard_.end();) {
         if (it->second.second + closed_shard_ttl_ >= now) {
+          LOG(info) << "removing shard from shard_id_to_shard_ " << it->first; 
           it = shard_id_to_shard_.erase(it); 
         } else {
           ++it;
