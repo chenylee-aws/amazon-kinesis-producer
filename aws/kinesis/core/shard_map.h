@@ -104,7 +104,7 @@ class ShardMap : boost::noncopyable {
   std::vector<Aws::Kinesis::Model::Shard> open_shards;
   std::thread cache_refreshing_thread_;
   // the time_point is used for calculating removal time for the shard after they are closed. 
-  std::map<uint64_t, std::pair<Aws::Kinesis::Model::Shard, std::chrono::time_point<std::chrono::steady_clock>>> shard_id_to_shard_;
+  std::unordered_map<uint64_t, std::pair<Aws::Kinesis::Model::Shard, std::chrono::time_point<std::chrono::steady_clock>>> shard_id_to_shard_;
   Mutex mutex_;
   Mutex shard_cache_mutex_;
   TimePoint updated_at_;

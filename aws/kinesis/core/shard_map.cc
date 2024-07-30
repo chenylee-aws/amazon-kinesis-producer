@@ -72,7 +72,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
 }
 
 boost::optional<Aws::Kinesis::Model::Shard> ShardMap::shard(const uint64_t& actual_shard) {
-  ReadLock lock(shard_cache_mutex_, aws::defer_lock);
+  ReadLock lock(shard_cache_mutex_);
   auto it = shard_id_to_shard_.find(actual_shard);
   if (it != shard_id_to_shard_.end()) {
       return it->second.first;
@@ -217,40 +217,44 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   std::set<uint64_t> open_shard_ids;
   uint128_t lastEndingHashKey = 0;
   
-  WriteLock lock(shard_cache_mutex_, aws::defer_lock);
 
   for (const auto& shard : open_shards) {
-      const auto& shard_id = shard_id_from_str(shard.GetShardId());
-      open_shard_ids.insert(shard_id);
+    const auto& shard_id = shard_id_from_str(shard.GetShardId());
+    open_shard_ids.insert(shard_id);
+    {
+      WriteLock lock(shard_cache_mutex_);
       shard_id_to_shard_.insert({shard_id, std::make_pair(shard, std::chrono::time_point<std::chrono::steady_clock>())});
-      
-      const auto& range = shard.GetHashKeyRange();
-      const uint128_t& start = uint128_t(range.GetStartingHashKey());
-      const uint128_t& end = uint128_t(range.GetEndingHashKey());
+    }
+    const auto& range = shard.GetHashKeyRange();
+    const uint128_t& start = uint128_t(range.GetStartingHashKey());
+    const uint128_t& end = uint128_t(range.GetEndingHashKey());
 
-      if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
-        store_open_shard(shard_id, uint128_t(end));
-        lastEndingHashKey = end;
-      }
+    if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
+      store_open_shard(shard_id, uint128_t(end));
+      lastEndingHashKey = end;
+    }
   }
-
+  
   //todo: remove 
   for (auto& entry : end_hash_key_to_shard_id_) {
      LOG(info) << "printing end_hash_key_to_shard_id_" << entry.second << " and "<< entry.first;
   }
 
   auto now = std::chrono::steady_clock::now();
-  for (auto& entry : shard_id_to_shard_) {
-    const uint64_t shard_id = entry.first;
-    // Skip if ttl is added 
-    if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
-      continue;
-    }
-    // Add ttl if shard in not open or has ending sequence number added.
-    if (open_shard_ids.find(shard_id) == open_shard_ids.end() || 
-        !entry.second.first.GetSequenceNumberRange().GetEndingSequenceNumber().empty()) {
-      LOG(info) << "Going to mark shard to remove " << shard_id << " from the map";
-        entry.second.second = now;
+  {
+    WriteLock lock(shard_cache_mutex_);
+    for (auto& entry : shard_id_to_shard_) {
+      const uint64_t shard_id = entry.first;
+      // Skip if ttl is added 
+      if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
+        continue;
+      }
+      // Add ttl if shard in not open or has ending sequence number added.
+      if (open_shard_ids.find(shard_id) == open_shard_ids.end() || 
+          !entry.second.first.GetSequenceNumberRange().GetEndingSequenceNumber().empty()) {
+        LOG(info) << "Going to mark shard to remove " << shard_id << " from the map";
+          entry.second.second = now;
+      }
     }
   }
 }
@@ -260,7 +264,8 @@ void ShardMap::refresh() {
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
     bool is_updated = true;
     {
-      ReadLock lock(shard_cache_mutex_, aws::defer_lock);
+      ReadLock lock(shard_cache_mutex_);
+      // checking to see if there is any entry that are marked 
       for (auto& entry : shard_id_to_shard_) {
         if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
           is_updated = false;
@@ -268,19 +273,20 @@ void ShardMap::refresh() {
         }
       }
     }
+    // skipping if map is already updated.
     if (is_updated) {
       continue;
     }
     auto now = std::chrono::steady_clock::now();
     {
-      WriteLock lock(shard_cache_mutex_, aws::defer_lock);
+      WriteLock lock(shard_cache_mutex_);
       // Remove item if enough time is passed since the entry is marked for deletion. 
-      for (auto it = shard_id_to_shard_.begin(); it != shard_id_to_shard_.end(); ) {
-          if (it->second.second + closed_shard_ttl_ >= now) {
-              it = shard_id_to_shard_.erase(it); 
-          } else {
-              ++it;
-          }
+      for (auto it = shard_id_to_shard_.begin(); it != shard_id_to_shard_.end();) {
+        if (it->second.second + closed_shard_ttl_ >= now) {
+          it = shard_id_to_shard_.erase(it); 
+        } else {
+          ++it;
+        }
       }
     }
   }
