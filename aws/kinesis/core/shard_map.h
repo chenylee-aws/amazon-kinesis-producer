@@ -48,7 +48,7 @@ class ShardMap : boost::noncopyable {
            std::chrono::milliseconds closed_shard_ttl = kClosedShardTtl);
 
   virtual boost::optional<uint64_t> shard_id(const uint128_t& hash_key);
-  boost::optional<Aws::Kinesis::Model::Shard> shard(const uint64_t& actual_shard);
+  boost::optional<Aws::Kinesis::Model::Shard> get_shard(const uint64_t& actual_shard);
 
   void invalidate(const TimePoint& seen_at, const boost::optional<uint64_t> predicted_shard);
 
@@ -91,7 +91,7 @@ class ShardMap : boost::noncopyable {
   void store_open_shard(const uint64_t shard_id, const uint128_t end_hash_key);
   void sort_all_open_shards();
   void build_minimal_disjoint_hashranges();
-  void refresh();
+  void cleanup();
 
   std::shared_ptr<aws::utils::Executor> executor_;
   std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
@@ -99,11 +99,13 @@ class ShardMap : boost::noncopyable {
   std::string stream_arn_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
 
-  std::thread refresh_thread_; 
+  std::thread cleanup_thread_; 
   
   State state_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
+  // this store only the latest shards returned from the most recent listShards call
   std::vector<Aws::Kinesis::Model::Shard> open_shards;
+  // the map containe shard entries for lookup purpose. stale shards will be attached with a ttl and be cleaned up by the clean up thread.
   // the time_point is used for calculating removal time for the shard after they are closed. 
   std::unordered_map<uint64_t, std::pair<Aws::Kinesis::Model::Shard, std::chrono::time_point<std::chrono::steady_clock>>> shard_id_to_shard_;
   Mutex mutex_;

@@ -209,7 +209,8 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
     }
     // this should only happen during stream scaling where new shard hasn't been learned and 
     // records was routed to the new shard.
-    boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_->shard(actual_shard);
+    boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_get_shard_cb_(actual_shard);
+    // boost::optional<Aws::Kinesis::Model::Shard> shard = boost::none;
     if (!shard) {
       LOG(warning) << "Retrying record because actual shard not found yet " << ur->source_id() << actual_shard;
       retry_not_expired(ur,

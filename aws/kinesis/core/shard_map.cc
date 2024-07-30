@@ -45,9 +45,9 @@ ShardMap::ShardMap(
       max_backoff_(max_backoff),
       closed_shard_ttl_(closed_shard_ttl),
       backoff_(min_backoff_),
-      refresh_thread_(std::thread(&ShardMap::refresh, this)) {
+      cleanup_thread_(std::thread(&ShardMap::cleanup, this)) {
   update();
-  refresh_thread_.detach();
+  cleanup_thread_.detach();
 }
 
 // Mutex shard_cache_mutex_;
@@ -73,7 +73,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
   return boost::none;
 }
 
-boost::optional<Aws::Kinesis::Model::Shard> ShardMap::shard(const uint64_t& actual_shard) {
+boost::optional<Aws::Kinesis::Model::Shard> ShardMap::get_shard(const uint64_t& actual_shard) {
   ReadLock lock(shard_cache_mutex_);
   auto it = shard_id_to_shard_.find(actual_shard);
   if (it != shard_id_to_shard_.end()) {
@@ -201,6 +201,28 @@ void ShardMap::store_open_shard(const uint64_t shard_id, const uint128_t end_has
       std::make_pair(end_hash_key, shard_id));
 }
 
+/*
+ * This creates minimal hashrange buckets that based on the current open and pending closed shards. Considering we get
+ * the following shards from the listShards response and here are the shards' lineage.
+ *
+ *          0(0-5)               1(6-10)  
+ *           /   \                /    \
+ *        3(0-2)  4(3-5)       5(6-8)   6(9-10)
+ *                    \         /
+ *                       7(3-8)
+ *
+ * The minimal buckets will be [3(0-2), 4(3-5), 5(6-8), 6(9-10)]. Shard 4 and 5 is choosen over 7 because during 
+ * reshard the recrods can still go to the parents (4, 5) for a short period of time even though we expect it
+ * to only go to the children shard (7). For any reason if the aggregated record was routed to either shard 4 and 5 
+ * we need to make sure the aggregated record doesn't contain user records that are outside of those shard's hashrange; 
+ * otherwise, some recrods will be retried. If we can aggregate records using either the shard 4 or 5's hashrange we know 
+ * if the aggregated record is put to the parent shard we won't like to retry again.
+ * 
+ * The buckets should converge once stream scaling is done. Whenever KPL tries to put to the parent shard the record will 
+ * get routed to the children shard if the parents are closed by the point. KPL will learn that the shard went to a 
+ * non-predicted shard and will try to invalidate the cache. Invalidate cache will allow the hashrange buckets to updated 
+ * and old hashrange will be discard.                 
+ */
 void ShardMap::build_minimal_disjoint_hashranges() {
   if (open_shards.empty()) {
       return;
@@ -261,7 +283,7 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   }
 }
 
-void ShardMap::refresh() {
+void ShardMap::cleanup() {
   while (true) {
     LOG(info) << "sleeping";
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 

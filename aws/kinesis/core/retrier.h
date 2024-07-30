@@ -60,6 +60,8 @@ class Retrier {
  // using Result = std::shared_ptr<aws::http::HttpResult>;
   using UserRecordCallback =
       std::function<void (const std::shared_ptr<UserRecord>&)>;
+  using ShardMapGetShardCallback = std::function<boost::optional<Aws::Kinesis::Model::Shard> (const uint64_t&)>;
+  // using ShardMapInvalidateCallback2 = std::function<void (const TimePoint&, const boost::optional<uint64_t>)>;
   using ShardMapInvalidateCallback = std::function<void (const TimePoint&, const boost::optional<uint64_t>)>;
   using ErrorCallback =
       std::function<void (const std::string&, const std::string&)>;
@@ -67,7 +69,7 @@ class Retrier {
   Retrier(std::shared_ptr<Configuration> config,
           UserRecordCallback finish_cb,
           UserRecordCallback retry_cb,
-          const std::shared_ptr<ShardMap> shard_map,
+          ShardMapGetShardCallback shard_map_get_shard_cb,
           ShardMapInvalidateCallback shard_map_invalidate_cb,
           ErrorCallback error_cb = ErrorCallback(),
           std::shared_ptr<aws::metrics::MetricsManager> metrics_manager =
@@ -75,10 +77,10 @@ class Retrier {
       : config_(config),
         finish_cb_(finish_cb),
         retry_cb_(retry_cb),
+        shard_map_get_shard_cb_(shard_map_get_shard_cb),
         shard_map_invalidate_cb_(shard_map_invalidate_cb),
         error_cb_(error_cb),
-        metrics_manager_(metrics_manager),
-        shard_map_(shard_map) {}
+        metrics_manager_(metrics_manager){}
 
   void put(std::shared_ptr<PutRecordsContext> prc) {
     handle_put_records_result(std::move(prc));
@@ -135,6 +137,7 @@ class Retrier {
   std::shared_ptr<Configuration> config_;
   UserRecordCallback finish_cb_;
   UserRecordCallback retry_cb_;
+  ShardMapGetShardCallback shard_map_get_shard_cb_;
   ShardMapInvalidateCallback shard_map_invalidate_cb_;
   ErrorCallback error_cb_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
