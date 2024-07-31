@@ -75,7 +75,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
 
 boost::optional<Aws::Kinesis::Model::Shard> ShardMap::get_shard(const uint64_t& actual_shard) {
   ReadLock lock(shard_cache_mutex_);
-  auto it = shard_id_to_shard_.find(actual_shard);
+  const auto& it = shard_id_to_shard_.find(actual_shard);
   if (it != shard_id_to_shard_.end()) {
       return it->second.first;
   }
@@ -87,7 +87,8 @@ void ShardMap::invalidate(const TimePoint& seen_at, const boost::optional<uint64
   WriteLock lock(mutex_);
   
   if (seen_at > updated_at_ && state_ == READY) {
-    // todo: stric the check 
+    // check if the predicted shard is still cached as an open shard. If it isn't it means that shardmap has been refreshed 
+    // already and the shard is dropped from the map and we don't need to invalidate the map again. 
     if (!predicted_shard || (shard_id_to_shard_.find(*predicted_shard) != shard_id_to_shard_.end())) {
       std::chrono::duration<double, std::milli> fp_ms = seen_at - updated_at_;
       LOG(info) << "Deciding to update shard map for \"" << stream_ 
@@ -227,7 +228,6 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   if (open_shards.empty()) {
       return;
   }
-  LOG(info) << "Sorting into buckets";
   // Sort shards by starting hashkey then by ending hashkey 
   std::sort(open_shards.begin(), open_shards.end(), [](const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
       const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());
@@ -237,15 +237,16 @@ void ShardMap::build_minimal_disjoint_hashranges() {
       return (startA < startB) || (startA == startB && endA < endB);
   });
 
-  // This is used filter out the closed shard from the shard_id_to_shard_ map.
+  // This is used for filtering out the closed shard from the shard_id_to_shard_ map.
   std::set<uint64_t> open_shard_ids;
-  uint128_t lastEndingHashKey = 0;
-  
-
+  uint128_t last_ending_hashkey = 0;  
   for (const auto& shard : open_shards) {
     const auto& shard_id = shard_id_from_str(shard.GetShardId());
     open_shard_ids.insert(shard_id);
+
     {
+      // storing all the shards we have seen so far so the retrier job can ask for the shard and check whether records 
+      // landed on the correct hashrange. 
       WriteLock lock(shard_cache_mutex_);
       shard_id_to_shard_.insert({shard_id, std::make_pair(shard, std::chrono::time_point<std::chrono::steady_clock>())});
     }
@@ -253,30 +254,24 @@ void ShardMap::build_minimal_disjoint_hashranges() {
     const uint128_t& start = uint128_t(range.GetStartingHashKey());
     const uint128_t& end = uint128_t(range.GetEndingHashKey());
 
-    if (lastEndingHashKey == 0 || start > lastEndingHashKey) {
-      store_open_shard(shard_id, uint128_t(end));
-      lastEndingHashKey = end;
+    if (last_ending_hashkey == 0 || start > last_ending_hashkey) {
+      store_open_shard(shard_id, end);
+      last_ending_hashkey = end;
     }
   }
   
-  //todo: remove 
-  for (auto& entry : end_hash_key_to_shard_id_) {
-     LOG(info) << "printing end_hash_key_to_shard_id_" << entry.second << " and "<< entry.first;
-  }
-
   auto now = std::chrono::steady_clock::now();
   {
     WriteLock lock(shard_cache_mutex_);
     for (auto& entry : shard_id_to_shard_) {
-      const uint64_t shard_id = entry.first;
-      // Skip if ttl is added 
+      // Skip if ttl is present 
       if (entry.second.second != std::chrono::time_point<std::chrono::steady_clock>()) {
         continue;
       }
-      // Add ttl if shard in not open or has ending sequence number added.
-      if (open_shard_ids.find(shard_id) == open_shard_ids.end() || 
+      const uint64_t& shard_id = entry.first;
+      // Add ttl if shard is not in the list of open shards or has ending sequence number added.
+      if (open_shard_ids.count(shard_id) == 0 || 
           !entry.second.first.GetSequenceNumberRange().GetEndingSequenceNumber().empty()) {
-        LOG(info) << "Going to mark shard to remove " << shard_id << " from the map";
           entry.second.second = now;
       }
     }
@@ -285,17 +280,14 @@ void ShardMap::build_minimal_disjoint_hashranges() {
 
 void ShardMap::cleanup() {
   while (true) {
-    LOG(info) << "sleeping";
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
     auto now = std::chrono::steady_clock::now();
     {
       WriteLock lock(shard_cache_mutex_);
-      LOG(info) << "acquired refresh lock";
-
       // Remove item if enough time has passed since the entry is marked for deletion. 
       for (auto it = shard_id_to_shard_.begin(); it != shard_id_to_shard_.end();) {
         if (it->second.second + closed_shard_ttl_ >= now) {
-          LOG(info) << "removing shard from shard_id_to_shard_ " << it->first; 
+          LOG(info) << "removing shard from shard cache " << it->first; 
           it = shard_id_to_shard_.erase(it); 
         } else {
           ++it;
