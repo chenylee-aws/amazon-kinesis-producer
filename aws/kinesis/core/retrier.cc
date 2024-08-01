@@ -107,13 +107,15 @@ Retrier::handle_put_records_result(std::shared_ptr<PutRecordsContext> prc) {
         //So either all user records in a kinesis record landed on the correct shard
         //or none did. So we can invalidate just once per kinesis record.
         bool should_invalidate_on_incorrect_shard = true;
-        for (auto& ur : kr->items()) {
+        const bool is_aggregated_record = kr->items().size() > 1;
+        for (auto& ur : kr->items()) {  
           should_invalidate_on_incorrect_shard &= succeed_if_correct_shard(ur,
                                    start,
                                    end,
                                    put_result.GetShardId(),
                                    put_result.GetSequenceNumber(),
-                                   should_invalidate_on_incorrect_shard);
+                                   should_invalidate_on_incorrect_shard,
+                                   is_aggregated_record);
         }
       } else {
         auto& err_code = put_result.GetErrorCode();
@@ -192,48 +194,39 @@ void Retrier::fail(const std::shared_ptr<UserRecord>& ur,
 bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
                                        TimePoint start,
                                        TimePoint end,
-                                       const std::string& shard_id,
+                                       const std::string& shard_id,                                     
                                        const std::string& sequence_number,
-                                       const bool should_invalidate_on_incorrect_shard) {
+                                       const bool should_invalidate_on_incorrect_shard,
+                                       const bool is_aggregated_record) {
   const uint64_t actual_shard = ShardMap::shard_id_from_str(shard_id);
   if (ur->predicted_shard() &&
       *ur->predicted_shard() != actual_shard) {
     //We should call invalidate only if:
     // 1. If we are told to invalidate on incorrect shard.
     if (should_invalidate_on_incorrect_shard) {
-      LOG(warning) << "Record " << ur->source_id() << " went to shard " << shard_id << " instead of the "
+      LOG(warning) << "Record went to shard " << actual_shard << " instead of the "
                    << "predicted shard " << *ur->predicted_shard() << "; this "
                    << "usually means the sharp map has changed.";   
 
       shard_map_invalidate_cb_(start, ur->predicted_shard());
     }
-    // this should only happen during stream scaling where new shard hasn't been learned and 
-    // records was routed to the new shard.
-    boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_get_shard_cb_(actual_shard);
-    if (!shard) {
-      LOG(warning) << "Retrying record because actual shard not found yet " << ur->source_id() << actual_shard;
-      retry_not_expired(ur,
-                        start,
-                        end,
-                        "Wrong Shard",
-                        "Record did not end up in expected shard.");
-      return false;
-    }
-    // Access the shard object
-    // comparing the hashrange between the actual shard and the record.
-    if (uint128_t((*shard).GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
-      uint128_t((*shard).GetHashKeyRange().GetEndingHashKey())>= ur->hash_key()) {
-        LOG(info) << "Record " << ur->source_id() << " went to shard " << shard_id << " instead of the "
-            << "predicted shard " << *ur->predicted_shard() << "; the hashrange of "
-            << "the actual shard covers that of the predicted shard. Marking this record as success.";   
-    } else {
-      LOG(warning) << "Retrying record " << ur->source_id();
-      retry_not_expired(ur,
-                start,
-                end,
-                "Wrong Shard",
-                "Record did not end up in expected shard.");
-      return false;
+
+    // if record is not coming from a aggregated record. When aggregation is off, one user record would map to one kinesis record,
+    // and the kinesis record will use the user record's explicit hashkey for it's hashkey as well. So if the kinesis 
+    // record ended up in the children shard during scaling it is safe to say the record went into the correct shard.
+    if (is_aggregated_record) {
+      // this is called here not earlier such that we have better change to find the new shard in the map.
+      // retry if shard is not found or hashrange of the user record doesn't fit into the actual shard's hashrange
+      const boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_get_shard_cb_(actual_shard);
+      if (!shard || !(uint128_t((*shard).GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
+          uint128_t((*shard).GetHashKeyRange().GetEndingHashKey()) >= ur->hash_key())) {
+          retry_not_expired(ur,
+                            start,
+                            end,
+                            "Wrong Shard",
+                            "Record did not end up in expected shard.");
+        return false;
+      } 
     }
   }
   finish_user_record(
