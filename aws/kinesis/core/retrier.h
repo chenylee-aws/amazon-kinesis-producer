@@ -125,7 +125,8 @@ class Retrier {
                                 TimePoint end,
                                 const std::string& shard_id,
                                 const std::string& sequence_number,
-                                const bool should_invalidate_on_incorrect_shard);
+                                const bool should_invalidate_on_incorrect_shard,
+                                const bool is_aggregated_record);
 
   void finish_user_record(const std::shared_ptr<UserRecord>& ur,
                           const Attempt& final_attempt);
