@@ -77,6 +77,18 @@ class ShardMap : boost::noncopyable {
     READY
   };
 
+  struct ShardRange {
+    uint64_t shard_id;
+    uint128_t start;
+    uint128_t end;
+  };
+
+  struct MaxHeapComparator {
+    bool operator()(const ShardRange& a, const ShardRange& b) {
+        return (a.end < b.end) || (a.end == b.end && a.start < b.start); 
+    }
+  };
+
   static const std::chrono::milliseconds kMinBackoff;
   static const std::chrono::milliseconds kMaxBackoff;
   static const std::chrono::milliseconds kClosedShardTtl;

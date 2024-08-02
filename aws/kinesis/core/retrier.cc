@@ -157,7 +157,7 @@ void Retrier::retry_not_expired(const std::shared_ptr<UserRecord>& ur,
          std::chrono::steady_clock::now(),
          std::chrono::steady_clock::now(),
          "Expired",
-         "Record has reached expiration");
+         "Record " + std::to_string(ur->source_id()) +" has reached expiration");
   } else {
     // TimeSensitive automatically sets the deadline to the expiration if
     // the given deadline is later than the expiration.
@@ -204,7 +204,7 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
     //We should call invalidate only if:
     // 1. If we are told to invalidate on incorrect shard.
     if (should_invalidate_on_incorrect_shard) {
-      LOG(warning) << "Record went to shard " << actual_shard << " instead of the "
+      LOG(warning) << "Record " << ur->source_id() << " went to shard " << actual_shard << " instead of the "
                    << "predicted shard " << *ur->predicted_shard() << "; this "
                    << "usually means the sharp map has changed.";   
 

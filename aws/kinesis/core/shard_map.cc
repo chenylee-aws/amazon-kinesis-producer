@@ -217,31 +217,102 @@ void ShardMap::clear_all_stored_shards() {
  * non-predicted shard and will try to invalidate the cache. Invalidate cache will allow the hashrange buckets to updated 
  * and old hashrange will be discard.                 
  */
+// void ShardMap::build_minimal_disjoint_hashranges() {
+//   if (open_shards_.empty()) {
+//       return;
+//   }
+//   // Sort shards by starting hashkey then by ending hashkey 
+//   std::sort(open_shards_.begin(), open_shards_.end(), [](const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
+//       const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());
+//       const uint128_t startB = uint128_t(b.GetHashKeyRange().GetStartingHashKey());
+//       const uint128_t endA = uint128_t(a.GetHashKeyRange().GetEndingHashKey());
+//       const uint128_t endB = uint128_t(b.GetHashKeyRange().GetEndingHashKey());
+//       return (startA < startB) || (startA == startB && endA < endB);
+//   });
+//   // This is used for filtering out the closed shard from the shard_id_to_shard_cache_ map.
+//   uint128_t last_ending_hashkey = 0;  
+//   for (const auto& shard : open_shards_) {
+//     const auto& shard_id = shard_id_from_str(shard.GetShardId());
+//     const auto& range = shard.GetHashKeyRange();
+//     const uint128_t& start = uint128_t(range.GetStartingHashKey());
+//     const uint128_t& end = uint128_t(range.GetEndingHashKey());
+
+//     if (last_ending_hashkey == 0 || start > last_ending_hashkey) {
+//       end_hash_key_to_shard_id_.push_back(std::make_pair(end, shard_id));
+//       last_ending_hashkey = end;
+//     }
+//   }
+//   // this is only iterating and inserting element which should be fast. 
+//   // todo: maybe we can combine it with the above loop.
+//   {
+//     WriteLock lock(shard_cache_mutex_);
+//     shard_cache_needs_cleanup_ = true;
+//     // storing all the shards we have seen so far so the retrier job can ask for the shard and check whether records 
+//     // landed on the correct hashrange. 
+//     for (const auto& shard : open_shards_) {
+//       shard_id_to_shard_cache_.insert({shard_id_from_str(shard.GetShardId()), shard});
+//     }
+//   }
+// }
+
+// struct ShardMap::Compare {
+//     bool operator()(const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
+//       const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());
+//       const uint128_t startB = uint128_t(b.GetHashKeyRange().GetStartingHashKey());
+//       const uint128_t endA = uint128_t(a.GetHashKeyRange().GetEndingHashKey());
+//       const uint128_t endB = uint128_t(b.GetHashKeyRange().GetEndingHashKey());
+//       return (endA > endB) || (endA == endB && startA > startB);
+//     }
+// };
+
 void ShardMap::build_minimal_disjoint_hashranges() {
   if (open_shards_.empty()) {
       return;
   }
-  // Sort shards by starting hashkey then by ending hashkey 
-  std::sort(open_shards_.begin(), open_shards_.end(), [](const Aws::Kinesis::Model::Shard& a, const Aws::Kinesis::Model::Shard& b) {
-      const uint128_t startA = uint128_t(a.GetHashKeyRange().GetStartingHashKey());
-      const uint128_t startB = uint128_t(b.GetHashKeyRange().GetStartingHashKey());
-      const uint128_t endA = uint128_t(a.GetHashKeyRange().GetEndingHashKey());
-      const uint128_t endB = uint128_t(b.GetHashKeyRange().GetEndingHashKey());
-      return (startA < startB) || (startA == startB && endA < endB);
-  });
-  // This is used for filtering out the closed shard from the shard_id_to_shard_cache_ map.
-  uint128_t last_ending_hashkey = 0;  
-  for (const auto& shard : open_shards_) {
-    const auto& shard_id = shard_id_from_str(shard.GetShardId());
-    const auto& range = shard.GetHashKeyRange();
-    const uint128_t& start = uint128_t(range.GetStartingHashKey());
-    const uint128_t& end = uint128_t(range.GetEndingHashKey());
+  LOG(info) << "size " << open_shards_.size();
+  std::priority_queue<ShardRange, std::vector<ShardRange>, MaxHeapComparator> max_heap;
 
-    if (last_ending_hashkey == 0 || start > last_ending_hashkey) {
-      end_hash_key_to_shard_id_.push_back(std::make_pair(end, shard_id));
-      last_ending_hashkey = end;
+  // Pre-reserve space for efficiency
+  // max_heap.reserve(open_shards_.size()); 
+
+  for (const auto& shard : open_shards_) {
+    const auto& range = shard.GetHashKeyRange();
+    LOG(info) << shard.GetShardId() << " " << range.GetStartingHashKey() << " " << range.GetEndingHashKey();
+    max_heap.push({shard_id_from_str(shard.GetShardId()), uint128_t(range.GetStartingHashKey()), uint128_t(range.GetEndingHashKey())});
+  }
+
+  uint128_t last_starting_hashkey = std::numeric_limits<uint128_t>::max();
+
+  while(!max_heap.empty()) {
+    ShardRange shard = max_heap.top();
+    max_heap.pop();    
+
+    if (shard.end < last_starting_hashkey) {
+      last_starting_hashkey = shard.start;
+      end_hash_key_to_shard_id_.emplace_back(shard.end, shard.shard_id);
+      LOG(info) << "pushed shard " << shard.shard_id << " " << shard.start << " " << shard.end;
+    } else {
+      if (shard.start < last_starting_hashkey) {
+        shard.end = last_starting_hashkey - 1;
+        max_heap.push(shard);
+      }
     }
   }
+
+  std::reverse(end_hash_key_to_shard_id_.begin(), end_hash_key_to_shard_id_.end());
+  // // This is used for filtering out the closed shard from the shard_id_to_shard_cache_ map.
+  // uint128_t last_ending_hashkey = 0;  
+  // for (const auto& shard : open_shards_) {
+  //   const auto& shard_id = shard_id_from_str(shard.GetShardId());
+  //   const auto& range = shard.GetHashKeyRange();
+  //   const uint128_t& start = uint128_t(range.GetStartingHashKey());
+  //   const uint128_t& end = uint128_t(range.GetEndingHashKey());
+
+  //   if (last_ending_hashkey == 0 || start > last_ending_hashkey) {
+  //     end_hash_key_to_shard_id_.push_back(std::make_pair(end, shard_id));
+  //     last_ending_hashkey = end;
+  //   }
+  // }
   // this is only iterating and inserting element which should be fast. 
   // todo: maybe we can combine it with the above loop.
   {
