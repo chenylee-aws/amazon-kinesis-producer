@@ -273,6 +273,8 @@ cd ..
 # Build the native kinesis producer
 $CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
 make -j8
+# commnet it out to disable unit testing
+ctest
 
 #copy native producer to a location that the java producer can package it
 NATIVE_BINARY_DIR=java/amazon-kinesis-producer/src/main/resources/amazon-kinesis-producer-native-binaries/$RELEASE_TYPE/

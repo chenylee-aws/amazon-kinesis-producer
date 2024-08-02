@@ -92,7 +92,8 @@ class Wrapper {
             kStreamARN,
             std::make_shared<aws::metrics::NullMetricsManager>(),
             std::chrono::milliseconds(100),
-            std::chrono::milliseconds(1000));
+            std::chrono::milliseconds(1000),
+            std::chrono::milliseconds(100));
 
     aws::utils::sleep_for(std::chrono::milliseconds(delay));
   }
@@ -100,6 +101,10 @@ class Wrapper {
   boost::optional<uint64_t> shard_id(const char* key) {
     return shard_map_->shard_id(
         boost::multiprecision::uint128_t(std::string(key)));
+  }
+
+  boost::optional<aws::kinesis::core::ShardMap::ShardRange> get_shard(const uint64_t shard_id) {
+    return shard_map_->get_shard(shard_id);
   }
 
   size_t num_req_received() const {
@@ -419,26 +424,25 @@ BOOST_AUTO_TEST_CASE(MixedParentAndChildrenShards) {
       *wrapper.shard_id("0"),
       2);
   BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("85070591730234615865843651857942052862"),
-      2);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("85070591730234615865843651857942052863"),
-      3);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("170141183460469231731687303715884105727"),
-      3);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("170141183460469231731687303715884105728"),
+      *wrapper.shard_id("6"),
       4);
   BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("270141183460469231731687303715884105728"),
-      5);
+      *wrapper.shard_id("7"),
+      8);
   BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("340282366920938463463374607431768211455"),
-      5);
+      *wrapper.shard_id("8"),
+      8);
   BOOST_CHECK_EQUAL(
       wrapper.num_req_received(),
       1);
+
+  BOOST_CHECK(wrapper.get_shard(0));
+  BOOST_CHECK(wrapper.get_shard(1));
+  // waiting for cleanup to happen
+  aws::utils::sleep_for(std::chrono::milliseconds(150));
+  BOOST_CHECK(!wrapper.get_shard(0));
+  BOOST_CHECK(!wrapper.get_shard(1));
+  BOOST_CHECK(wrapper.get_shard(8));
 }
 
 BOOST_AUTO_TEST_CASE(PaginatedResults) {

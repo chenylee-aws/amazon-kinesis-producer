@@ -217,9 +217,8 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
     if (is_aggregated_record) {
       // this is called here not earlier such that we have better change to find the new shard in the map.
       // retry if shard is not found or hashrange of the user record doesn't fit into the actual shard's hashrange
-      const boost::optional<Aws::Kinesis::Model::Shard> shard = shard_map_get_shard_cb_(actual_shard);
-      if (!shard || !(uint128_t((*shard).GetHashKeyRange().GetStartingHashKey()) <= ur->hash_key() && 
-          uint128_t((*shard).GetHashKeyRange().GetEndingHashKey()) >= ur->hash_key())) {
+      const boost::optional<ShardMap::ShardRange> shard = shard_map_get_shard_cb_(actual_shard);
+      if (!shard || !((*shard).start <= ur->hash_key() && (*shard).end >= ur->hash_key())) {
           retry_not_expired(ur,
                             start,
                             end,

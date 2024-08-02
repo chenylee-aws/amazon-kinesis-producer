@@ -60,8 +60,7 @@ class Retrier {
  // using Result = std::shared_ptr<aws::http::HttpResult>;
   using UserRecordCallback =
       std::function<void (const std::shared_ptr<UserRecord>&)>;
-  using ShardMapGetShardCallback = std::function<boost::optional<Aws::Kinesis::Model::Shard> (const uint64_t&)>;
-  // using ShardMapInvalidateCallback2 = std::function<void (const TimePoint&, const boost::optional<uint64_t>)>;
+  using ShardMapGetShardCallback = std::function<boost::optional<ShardMap::ShardRange> (const uint64_t&)>;
   using ShardMapInvalidateCallback = std::function<void (const TimePoint&, const boost::optional<uint64_t>)>;
   using ErrorCallback =
       std::function<void (const std::string&, const std::string&)>;
