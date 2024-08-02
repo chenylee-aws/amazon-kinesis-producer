@@ -4,7 +4,7 @@ include(CheckCCompilerFlag)
 
 
 set(THIRD_PARTY_LIB_DIR "${amazon_kinesis_producer_SOURCE_DIR}/third_party/lib")
-set (ADD_BUILD_OPTIONS "${ADD_BUILD_OPTIONS} -DBUILD_TESTING:BOOL=OFF")
+set(ADD_BUILD_OPTIONS "${ADD_BUILD_OPTIONS} -DBUILD_TESTING:BOOL=TRUE")
 
 if(CMAKE_COMPILER_IS_GNUCXX)
     set(ADDL_LINK_CONFIG "-static-libstdc++")

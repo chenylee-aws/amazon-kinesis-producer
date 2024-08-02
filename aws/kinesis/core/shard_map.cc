@@ -73,7 +73,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
   return boost::none;
 }
 
-boost::optional<Aws::Kinesis::Model::Shard> ShardMap::get_shard(const uint64_t& shard_id) {
+boost::optional<ShardMap::ShardRange> ShardMap::get_shard(const uint64_t& shard_id) {
   ReadLock lock(shard_cache_mutex_);
   const auto& it = shard_id_to_shard_cache_.find(shard_id);
   if (it != shard_id_to_shard_cache_.end()) {
@@ -275,12 +275,17 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   // Pre-reserve space for efficiency
   // max_heap.reserve(open_shards_.size()); 
 
-  for (const auto& shard : open_shards_) {
-    const auto& range = shard.GetHashKeyRange();
-    LOG(info) << shard.GetShardId() << " " << range.GetStartingHashKey() << " " << range.GetEndingHashKey();
-    max_heap.push({shard_id_from_str(shard.GetShardId()), uint128_t(range.GetStartingHashKey()), uint128_t(range.GetEndingHashKey())});
+  {
+    WriteLock lock(shard_cache_mutex_);
+    shard_cache_needs_cleanup_ = true;
+    for (const auto& shard : open_shards_) {
+      const auto& range = shard.GetHashKeyRange();
+      LOG(info) << shard.GetShardId() << " " << range.GetStartingHashKey() << " " << range.GetEndingHashKey();
+      const ShardRange shard_range({shard_id_from_str(shard.GetShardId()), uint128_t(range.GetStartingHashKey()), uint128_t(range.GetEndingHashKey())});
+      max_heap.push(shard_range);
+      shard_id_to_shard_cache_.insert({shard_id_from_str(shard.GetShardId()), shard_range});
+    }
   }
-
   uint128_t last_starting_hashkey = std::numeric_limits<uint128_t>::max();
 
   while(!max_heap.empty()) {
@@ -315,15 +320,15 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   // }
   // this is only iterating and inserting element which should be fast. 
   // todo: maybe we can combine it with the above loop.
-  {
-    WriteLock lock(shard_cache_mutex_);
-    shard_cache_needs_cleanup_ = true;
-    // storing all the shards we have seen so far so the retrier job can ask for the shard and check whether records 
-    // landed on the correct hashrange. 
-    for (const auto& shard : open_shards_) {
-      shard_id_to_shard_cache_.insert({shard_id_from_str(shard.GetShardId()), shard});
-    }
-  }
+  // {
+  //   WriteLock lock(shard_cache_mutex_);
+  //   shard_cache_needs_cleanup_ = true;
+  //   // storing all the shards we have seen so far so the retrier job can ask for the shard and check whether records 
+  //   // landed on the correct hashrange. 
+  //   for (const auto& shard : open_shards_) {
+  //     shard_id_to_shard_cache_.insert({shard_id_from_str(shard.GetShardId()), shard});
+  //   }
+  // }
 }
 
 void ShardMap::cleanup() {
