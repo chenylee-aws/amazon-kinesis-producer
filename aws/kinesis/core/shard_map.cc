@@ -47,7 +47,7 @@ ShardMap::ShardMap(
       backoff_(min_backoff_),
       cleanup_thread_(std::thread(&ShardMap::cleanup, this)) {
   update();
-  cleanup_thread_.detach();
+  // cleanup_thread_.detach();
 }
 
 // Mutex shard_cache_mutex_;
@@ -116,7 +116,7 @@ void ShardMap::update() {
 void ShardMap::list_shards(const Aws::String& next_token) {
   Aws::Kinesis::Model::ListShardsRequest req;
   req.SetMaxResults(1000);
-
+  LOG(info) << "calling list shard test";
   if (!next_token.empty()) {
     req.SetNextToken(next_token);
   } else {
@@ -126,6 +126,7 @@ void ShardMap::list_shards(const Aws::String& next_token) {
     shardFilter.SetType(Aws::Kinesis::Model::ShardFilterType::AT_LATEST);
     req.SetShardFilter(shardFilter);
   }
+    LOG(info) << "careaffdf t";
   kinesis_client_->ListShardsAsync(
       req,
       [this](auto /*client*/, auto& /*req*/, auto& outcome, auto& /*ctx*/) {
@@ -136,11 +137,14 @@ void ShardMap::list_shards(const Aws::String& next_token) {
 
 void ShardMap::list_shards_callback(
       const Aws::Kinesis::Model::ListShardsOutcome& outcome) {
+    LOG(info) << "in list call back  test";
+
   if (!outcome.IsSuccess()) {
     auto e = outcome.GetError();
     update_fail(e.GetExceptionName(), e.GetMessage());
     return;
   }
+    LOG(info) << "wtdslfdf l back  test";
 
   auto& shards = outcome.GetResult().GetShards();  
   for (auto& shard : shards) {
@@ -149,12 +153,14 @@ void ShardMap::list_shards_callback(
   }
 
   backoff_ = min_backoff_;
-  
+      LOG(info) << "sdfsdfffff l back  test";
+
   auto& next_token = outcome.GetResult().GetNextToken();
   if (!next_token.empty()) {
     list_shards(next_token);
     return;
   }
+      LOG(info) << "12312312312313 l back  test";
 
   build_minimal_disjoint_hashranges();
 
@@ -269,6 +275,7 @@ void ShardMap::build_minimal_disjoint_hashranges() {
   if (open_shards_.empty()) {
       return;
   }
+  std::cout << "building hashrange" ; 
   LOG(info) << "size " << open_shards_.size();
   std::priority_queue<ShardRange, std::vector<ShardRange>, MaxHeapComparator> max_heap;
 
@@ -332,6 +339,7 @@ void ShardMap::build_minimal_disjoint_hashranges() {
 }
 
 void ShardMap::cleanup() {
+  return;
   while (true) {
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
     auto now = std::chrono::steady_clock::now();   

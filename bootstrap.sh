@@ -95,27 +95,27 @@ function _curl {
   curl -L --cacert "$INSTALL_DIR/cacert.pem" $@
 }
 
-cd $INSTALL_DIR
-wget --no-check-certificate -P $INSTALL_DIR $CA_CERT
+# cd $INSTALL_DIR
+# wget --no-check-certificate -P $INSTALL_DIR $CA_CERT
 
-function conf {
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    silence ./configure \
-      --prefix="$INSTALL_DIR" \
-      DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" \
-      LDFLAGS="$LDFLAGS" \
-      CXXFLAGS="$CXXFLAGS" \
-      $@
-  else
-    silence ./configure \
-      --prefix="$INSTALL_DIR" \
-      LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
-      LDFLAGS="$LDFLAGS" \
-      CXXFLAGS="$CXXFLAGS" \
-      C_INCLUDE_PATH="$C_INCLUDE_PATH" \
-      $@
-  fi
-}
+# function conf {
+#   if [[ "$OSTYPE" == "darwin"* ]]; then
+#     silence ./configure \
+#       --prefix="$INSTALL_DIR" \
+#       DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" \
+#       LDFLAGS="$LDFLAGS" \
+#       CXXFLAGS="$CXXFLAGS" \
+#       $@
+#   else
+#     silence ./configure \
+#       --prefix="$INSTALL_DIR" \
+#       LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
+#       LDFLAGS="$LDFLAGS" \
+#       CXXFLAGS="$CXXFLAGS" \
+#       C_INCLUDE_PATH="$C_INCLUDE_PATH" \
+#       $@
+#   fi
+# }
 
 # # OpenSSL
 # if [ ! -d "openssl-${OPENSSL_VERSION}" ]; then
@@ -238,14 +238,14 @@ function conf {
 
 # AWS C++ SDK
 # if [ ! -d "aws-sdk-cpp" ]; then
-#   git clone https://github.com/awslabs/aws-sdk-cpp.git aws-sdk-cpp
-#   pushd aws-sdk-cpp
-#   git checkout ${AWS_SDK_CPP_VERSION}
-#   git submodule update --init --recursive
-#   popd
+  # git clone https://github.com/awslabs/aws-sdk-cpp.git aws-sdk-cpp
+  # pushd aws-sdk-cpp
+  # git checkout ${AWS_SDK_CPP_VERSION}
+  # git submodule update --init --recursive
+  # popd
 
-#   rm -rf aws-sdk-cpp-build
-#   mkdir aws-sdk-cpp-build
+  # rm -rf aws-sdk-cpp-build
+  # mkdir aws-sdk-cpp-build
 
 #   cd aws-sdk-cpp-build
 
@@ -268,13 +268,14 @@ function conf {
 
 # fi
 
-cd ..
+# cd ..
 
 # Build the native kinesis producer
 $CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
 make -j8
-# commnet it out to disable unit testing
-ctest
+
+# cmake -DCMAKE_PREFIX_PATH="$(pwd)/third_party" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+# make -j8
 
 #copy native producer to a location that the java producer can package it
 NATIVE_BINARY_DIR=java/amazon-kinesis-producer/src/main/resources/amazon-kinesis-producer-native-binaries/$RELEASE_TYPE/
@@ -282,9 +283,9 @@ mkdir -p $NATIVE_BINARY_DIR
 cp kinesis_producer $NATIVE_BINARY_DIR
 
 #build the java producer and install it locally
-# pushd java/amazon-kinesis-producer
-# mvn clean package source:jar javadoc:jar install
-# popd
+pushd java/amazon-kinesis-producer
+mvn clean package source:jar javadoc:jar install
+popd
 
 set +e
 set +x

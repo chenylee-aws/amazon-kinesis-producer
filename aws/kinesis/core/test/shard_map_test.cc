@@ -57,6 +57,7 @@ class MockKinesisClient : public Aws::Kinesis::KinesisClient {
       const Aws::Kinesis::ListShardsResponseReceivedHandler& handler,
       const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context
           = nullptr) const {
+    std::cout << "calling async list shard ";
     executor_->schedule([=] {
     
       if (outcomes_list_shards_.size() == 0) {
@@ -93,7 +94,7 @@ class Wrapper {
             std::make_shared<aws::metrics::NullMetricsManager>(),
             std::chrono::milliseconds(100),
             std::chrono::milliseconds(1000),
-            std::chrono::milliseconds(100));
+            std::chrono::milliseconds(10000));
 
     aws::utils::sleep_for(std::chrono::milliseconds(delay));
   }
@@ -157,46 +158,47 @@ BOOST_AUTO_TEST_SUITE(ShardMap)
 
 BOOST_AUTO_TEST_CASE(Basic) {
   std::list<Aws::Kinesis::Model::ListShardsOutcome> outcomes_list_shards;
-
-  outcomes_list_shards.push_back(
-        success_outcome<Aws::Kinesis::Model::ListShardsResult,Aws::Kinesis::Model::ListShardsOutcome>(R"XXXX({
-      "Shards": [
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "340282366920938463463374607431768211455",
-            "StartingHashKey": "170141183460469231731687303715884105728"
-          },
-          "ShardId": "shardId-000000000001",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "85070591730234615865843651857942052862",
-            "StartingHashKey": "0"
-          },
-          "ShardId": "shardId-000000000002",
-          "ParentShardId": "shardId-000000000000",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549169978943246555030591128013184047489460388642160674"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "170141183460469231731687303715884105727",
-            "StartingHashKey": "85070591730234615865843651857942052863"
-          },
-          "ShardId": "shardId-000000000003",
-          "ParentShardId": "shardId-000000000000",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549169978965547300229121751154719765762108750148141106"
-          }
-        }
-      ]
-  })XXXX"));
+outcomes_list_shards.push_back(error_outcome<Aws::Kinesis::Model::ListShardsOutcome>());
+  // outcomes_list_shards.push_back(
+        // success_outcome<Aws::Kinesis::Model::ListShardsResult,Aws::Kinesis::Model::ListShardsOutcome>(R"XXXX({
+  //     "Shards": [
+  //       {
+  //         "HashKeyRange": {
+  //           "EndingHashKey": "340282366920938463463374607431768211455",
+  //           "StartingHashKey": "170141183460469231731687303715884105728"
+  //         },
+  //         "ShardId": "shardId-000000000001",
+  //         "SequenceNumberRange": {
+  //           "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
+  //         }
+  //       },
+  //       {
+  //         "HashKeyRange": {
+  //           "EndingHashKey": "85070591730234615865843651857942052862",
+  //           "StartingHashKey": "0"
+  //         },
+  //         "ShardId": "shardId-000000000002",
+  //         "ParentShardId": "shardId-000000000000",
+  //         "SequenceNumberRange": {
+  //           "StartingSequenceNumber": "49549169978943246555030591128013184047489460388642160674"
+  //         }
+  //       },
+  //       {
+  //         "HashKeyRange": {
+  //           "EndingHashKey": "170141183460469231731687303715884105727",
+  //           "StartingHashKey": "85070591730234615865843651857942052863"
+  //         },
+  //         "ShardId": "shardId-000000000003",
+  //         "ParentShardId": "shardId-000000000000",
+  //         "SequenceNumberRange": {
+  //           "StartingSequenceNumber": "49549169978965547300229121751154719765762108750148141106"
+  //         }
+  //       }
+  //     ]
+  // })XXXX"));
 
   Wrapper wrapper(outcomes_list_shards);
+  aws::utils::sleep_for(std::chrono::milliseconds(1500));
 
   BOOST_CHECK_EQUAL(
       *wrapper.shard_id("170141183460469231731687303715884105728"),
