@@ -37,6 +37,11 @@ class ShardMap : boost::noncopyable {
   using uint128_t = boost::multiprecision::uint128_t;
   using TimePoint = std::chrono::steady_clock::time_point;
 
+  using ListShardsCaller = std::function<void (
+    const Aws::Kinesis::Model::ListShardsRequest& req, 
+    const Aws::Kinesis::ListShardsResponseReceivedHandler& handler, 
+    const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context)>;
+
   struct ShardRange {
     uint64_t shard_id;
     uint128_t start;
@@ -44,7 +49,8 @@ class ShardMap : boost::noncopyable {
   };
 
   ShardMap(std::shared_ptr<aws::utils::Executor> executor,
-           std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client,
+          //  std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client,
+           ListShardsCaller list_shards_caller,
            std::string stream,
            std::string stream_arn,
            std::shared_ptr<aws::metrics::MetricsManager> metrics_manager
@@ -105,7 +111,7 @@ class ShardMap : boost::noncopyable {
   void cleanup();
 
   std::shared_ptr<aws::utils::Executor> executor_;
-  std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
+  // std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
   std::string stream_;
   std::string stream_arn_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
@@ -130,6 +136,7 @@ class ShardMap : boost::noncopyable {
   std::chrono::milliseconds backoff_;
   std::chrono::milliseconds closed_shard_ttl_;
   std::shared_ptr<aws::utils::ScheduledCallback> scheduled_callback_;
+  ListShardsCaller list_shards_caller_;
 };
 
 } //namespace core

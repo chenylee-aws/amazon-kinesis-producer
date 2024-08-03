@@ -57,7 +57,6 @@ class MockKinesisClient : public Aws::Kinesis::KinesisClient {
       const Aws::Kinesis::ListShardsResponseReceivedHandler& handler,
       const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context
           = nullptr) const {
-    std::cout << "calling async list shard ";
     executor_->schedule([=] {
     
       if (outcomes_list_shards_.size() == 0) {
@@ -83,12 +82,13 @@ class Wrapper {
       std::list<Aws::Kinesis::Model::ListShardsOutcome> outcomes_list_shards,
           int delay = 1500)
       : num_req_received_(0) {
+    mock_kinesis_client_ = std::make_shared<MockKinesisClient>(
+                outcomes_list_shards,
+                [this] { num_req_received_++; });
     shard_map_ =
         std::make_shared<aws::kinesis::core::ShardMap>(
             std::make_shared<aws::utils::IoServiceExecutor>(1),
-            std::make_shared<MockKinesisClient>(
-                outcomes_list_shards,
-                [this] { num_req_received_++; }),
+            [this](auto& req, auto& handler, auto& context) { mock_kinesis_client_->ListShardsAsync(req, handler, context); },
             kStreamName,
             kStreamARN,
             std::make_shared<aws::metrics::NullMetricsManager>(),
@@ -119,6 +119,7 @@ class Wrapper {
  private:
   size_t num_req_received_;
   std::shared_ptr<aws::kinesis::core::ShardMap> shard_map_;
+  std::shared_ptr<MockKinesisClient> mock_kinesis_client_;
 };
 
 

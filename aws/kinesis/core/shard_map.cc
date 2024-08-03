@@ -28,7 +28,8 @@ const std::chrono::milliseconds ShardMap::kClosedShardTtl{60000};
 
 ShardMap::ShardMap(
     std::shared_ptr<aws::utils::Executor> executor,
-    std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client,
+    // std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client,
+    ListShardsCaller list_shards_caller,
     std::string stream,
     std::string stream_arn,
     std::shared_ptr<aws::metrics::MetricsManager> metrics_manager,
@@ -36,7 +37,7 @@ ShardMap::ShardMap(
     std::chrono::milliseconds max_backoff,
     std::chrono::milliseconds closed_shard_ttl)
     : executor_(std::move(executor)),
-      kinesis_client_(std::move(kinesis_client)),
+      // kinesis_client_(std::move(kinesis_client)),
       stream_(std::move(stream)),
       stream_arn_(std::move(stream_arn)),
       metrics_manager_(std::move(metrics_manager)),
@@ -45,9 +46,10 @@ ShardMap::ShardMap(
       max_backoff_(max_backoff),
       closed_shard_ttl_(closed_shard_ttl),
       backoff_(min_backoff_),
+      list_shards_caller_(list_shards_caller),
       cleanup_thread_(std::thread(&ShardMap::cleanup, this)) {
   update();
-  // cleanup_thread_.detach();
+  cleanup_thread_.detach();
 }
 
 // Mutex shard_cache_mutex_;
@@ -126,13 +128,18 @@ void ShardMap::list_shards(const Aws::String& next_token) {
     shardFilter.SetType(Aws::Kinesis::Model::ShardFilterType::AT_LATEST);
     req.SetShardFilter(shardFilter);
   }
-    LOG(info) << "careaffdf t";
-  kinesis_client_->ListShardsAsync(
+    list_shards_caller_(
       req,
       [this](auto /*client*/, auto& /*req*/, auto& outcome, auto& /*ctx*/) {
         this->list_shards_callback(outcome);
       },
       std::shared_ptr<const Aws::Client::AsyncCallerContext>());
+  // kinesis_client_->ListShardsAsync(
+  //     req,
+  //     [this](auto /*client*/, auto& /*req*/, auto& outcome, auto& /*ctx*/) {
+  //       this->list_shards_callback(outcome);
+  //     },
+  //     std::shared_ptr<const Aws::Client::AsyncCallerContext>());
 }
 
 void ShardMap::list_shards_callback(
