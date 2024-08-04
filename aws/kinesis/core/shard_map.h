@@ -42,14 +42,7 @@ class ShardMap : boost::noncopyable {
     const Aws::Kinesis::ListShardsResponseReceivedHandler& handler, 
     const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context)>;
 
-  struct ShardRange {
-    uint64_t shard_id;
-    uint128_t start;
-    uint128_t end;
-  };
-
   ShardMap(std::shared_ptr<aws::utils::Executor> executor,
-          //  std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client,
            ListShardsCaller list_shards_caller,
            std::string stream,
            std::string stream_arn,
@@ -60,7 +53,7 @@ class ShardMap : boost::noncopyable {
            std::chrono::milliseconds closed_shard_ttl = kClosedShardTtl);
 
   virtual boost::optional<uint64_t> shard_id(const uint128_t& hash_key);
-  boost::optional<ShardMap::ShardRange> get_shard(const uint64_t& shard_id);
+  boost::optional<std::pair<ShardMap::uint128_t, ShardMap::uint128_t>> get_hashrange(const uint64_t& shard_id);
 
   void invalidate(const TimePoint& seen_at, const boost::optional<uint64_t> predicted_shard);
 
@@ -89,12 +82,6 @@ class ShardMap : boost::noncopyable {
     READY
   };
 
-  struct MaxHeapComparator {
-    bool operator()(const ShardRange& a, const ShardRange& b) {
-        return (a.end < b.end) || (a.end == b.end && a.start < b.start); 
-    }
-  };
-
   static const std::chrono::milliseconds kMinBackoff;
   static const std::chrono::milliseconds kMaxBackoff;
   static const std::chrono::milliseconds kClosedShardTtl;
@@ -111,7 +98,6 @@ class ShardMap : boost::noncopyable {
   void cleanup();
 
   std::shared_ptr<aws::utils::Executor> executor_;
-  // std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
   std::string stream_;
   std::string stream_arn_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
@@ -119,14 +105,9 @@ class ShardMap : boost::noncopyable {
   std::thread cleanup_thread_; 
   
   State state_;
-  bool shard_cache_needs_cleanup_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;
-  std::unordered_set<uint64_t> open_shard_ids_;
-  // this store only the latest shards returned from the most recent listShards call
-  std::vector<Aws::Kinesis::Model::Shard> open_shards_;
-  // the map containe shard entries for lookup purpose. stale shards will be attached with a ttl and be cleaned up by the clean up thread.
-  // the time_point is used for calculating removal time for the shard after they are closed. 
-  std::unordered_map<uint64_t, ShardRange> shard_id_to_shard_cache_;
+  std::unordered_map<uint64_t, Aws::Kinesis::Model::Shard> open_shards_;
+  std::unordered_map<uint64_t, std::pair<uint128_t, uint128_t>> shard_id_to_shard_hashkey_cache_;
   
   Mutex mutex_;
   Mutex shard_cache_mutex_;

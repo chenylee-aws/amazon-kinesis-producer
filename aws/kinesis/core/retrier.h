@@ -60,7 +60,7 @@ class Retrier {
  // using Result = std::shared_ptr<aws::http::HttpResult>;
   using UserRecordCallback =
       std::function<void (const std::shared_ptr<UserRecord>&)>;
-  using ShardMapGetShardCallback = std::function<boost::optional<ShardMap::ShardRange> (const uint64_t&)>;
+  using ShardMapGetHashrangeCallback = std::function<boost::optional<std::pair<uint128_t, uint128_t>> (const uint64_t&)>;
   using ShardMapInvalidateCallback = std::function<void (const TimePoint&, const boost::optional<uint64_t>)>;
   using ErrorCallback =
       std::function<void (const std::string&, const std::string&)>;
@@ -68,7 +68,7 @@ class Retrier {
   Retrier(std::shared_ptr<Configuration> config,
           UserRecordCallback finish_cb,
           UserRecordCallback retry_cb,
-          ShardMapGetShardCallback shard_map_get_shard_cb,
+          ShardMapGetHashrangeCallback shard_map_get_hashrange_cb,
           ShardMapInvalidateCallback shard_map_invalidate_cb,
           ErrorCallback error_cb = ErrorCallback(),
           std::shared_ptr<aws::metrics::MetricsManager> metrics_manager =
@@ -76,7 +76,7 @@ class Retrier {
       : config_(config),
         finish_cb_(finish_cb),
         retry_cb_(retry_cb),
-        shard_map_get_shard_cb_(shard_map_get_shard_cb),
+        shard_map_get_hashrange_cb_(shard_map_get_hashrange_cb),
         shard_map_invalidate_cb_(shard_map_invalidate_cb),
         error_cb_(error_cb),
         metrics_manager_(metrics_manager){}
@@ -125,6 +125,7 @@ class Retrier {
                                 const std::string& shard_id,
                                 const std::string& sequence_number,
                                 const bool should_invalidate_on_incorrect_shard,
+                                const boost::optional<std::pair<uint128_t, uint128_t>>& hashrange_actual_shard,
                                 const bool is_aggregated_record);
 
   void finish_user_record(const std::shared_ptr<UserRecord>& ur,
@@ -134,10 +135,14 @@ class Retrier {
 
   void emit_metrics(const std::shared_ptr<PutRecordsContext>& prc);
 
+  void invalidate_cache(const std::shared_ptr<UserRecord>& ur,
+  const TimePoint start,
+                                const uint64_t& actual_shard,
+                                bool should_invalidate_on_incorrect_shard);
   std::shared_ptr<Configuration> config_;
   UserRecordCallback finish_cb_;
   UserRecordCallback retry_cb_;
-  ShardMapGetShardCallback shard_map_get_shard_cb_;
+  ShardMapGetHashrangeCallback shard_map_get_hashrange_cb_;
   ShardMapInvalidateCallback shard_map_invalidate_cb_;
   ErrorCallback error_cb_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;

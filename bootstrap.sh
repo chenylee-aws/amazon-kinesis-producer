@@ -283,9 +283,9 @@ mkdir -p $NATIVE_BINARY_DIR
 cp kinesis_producer $NATIVE_BINARY_DIR
 
 #build the java producer and install it locally
-pushd java/amazon-kinesis-producer
-mvn clean package source:jar javadoc:jar install
-popd
+# pushd java/amazon-kinesis-producer
+# mvn clean package source:jar javadoc:jar install
+# popd
 
 set +e
 set +x

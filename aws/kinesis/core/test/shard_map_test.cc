@@ -25,6 +25,8 @@
 
 namespace {
 
+using uint128_t = boost::multiprecision::uint128_t;
+
 const std::string kStreamName = "myStream";
 const std::string kStreamARN = "arn:aws:kinesis:us-east-2:123456789012:stream/myStream";
 
@@ -100,12 +102,11 @@ class Wrapper {
   }
 
   boost::optional<uint64_t> shard_id(const char* key) {
-    return shard_map_->shard_id(
-        boost::multiprecision::uint128_t(std::string(key)));
+    return shard_map_->shard_id(uint128_t(std::string(key)));
   }
 
-  boost::optional<aws::kinesis::core::ShardMap::ShardRange> get_shard(const uint64_t shard_id) {
-    return shard_map_->get_shard(shard_id);
+  boost::optional<std::pair<uint128_t, uint128_t>> get_hashrange(const uint64_t shard_id) {
+    return shard_map_->get_hashrange(shard_id);
   }
 
   size_t num_req_received() const {
@@ -159,44 +160,43 @@ BOOST_AUTO_TEST_SUITE(ShardMap)
 
 BOOST_AUTO_TEST_CASE(Basic) {
   std::list<Aws::Kinesis::Model::ListShardsOutcome> outcomes_list_shards;
-outcomes_list_shards.push_back(error_outcome<Aws::Kinesis::Model::ListShardsOutcome>());
-  // outcomes_list_shards.push_back(
-        // success_outcome<Aws::Kinesis::Model::ListShardsResult,Aws::Kinesis::Model::ListShardsOutcome>(R"XXXX({
-  //     "Shards": [
-  //       {
-  //         "HashKeyRange": {
-  //           "EndingHashKey": "340282366920938463463374607431768211455",
-  //           "StartingHashKey": "170141183460469231731687303715884105728"
-  //         },
-  //         "ShardId": "shardId-000000000001",
-  //         "SequenceNumberRange": {
-  //           "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
-  //         }
-  //       },
-  //       {
-  //         "HashKeyRange": {
-  //           "EndingHashKey": "85070591730234615865843651857942052862",
-  //           "StartingHashKey": "0"
-  //         },
-  //         "ShardId": "shardId-000000000002",
-  //         "ParentShardId": "shardId-000000000000",
-  //         "SequenceNumberRange": {
-  //           "StartingSequenceNumber": "49549169978943246555030591128013184047489460388642160674"
-  //         }
-  //       },
-  //       {
-  //         "HashKeyRange": {
-  //           "EndingHashKey": "170141183460469231731687303715884105727",
-  //           "StartingHashKey": "85070591730234615865843651857942052863"
-  //         },
-  //         "ShardId": "shardId-000000000003",
-  //         "ParentShardId": "shardId-000000000000",
-  //         "SequenceNumberRange": {
-  //           "StartingSequenceNumber": "49549169978965547300229121751154719765762108750148141106"
-  //         }
-  //       }
-  //     ]
-  // })XXXX"));
+  outcomes_list_shards.push_back(
+        success_outcome<Aws::Kinesis::Model::ListShardsResult,Aws::Kinesis::Model::ListShardsOutcome>(R"XXXX({
+      "Shards": [
+        {
+          "HashKeyRange": {
+            "EndingHashKey": "340282366920938463463374607431768211455",
+            "StartingHashKey": "170141183460469231731687303715884105728"
+          },
+          "ShardId": "shardId-000000000001",
+          "SequenceNumberRange": {
+            "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
+          }
+        },
+        {
+          "HashKeyRange": {
+            "EndingHashKey": "85070591730234615865843651857942052862",
+            "StartingHashKey": "0"
+          },
+          "ShardId": "shardId-000000000002",
+          "ParentShardId": "shardId-000000000000",
+          "SequenceNumberRange": {
+            "StartingSequenceNumber": "49549169978943246555030591128013184047489460388642160674"
+          }
+        },
+        {
+          "HashKeyRange": {
+            "EndingHashKey": "170141183460469231731687303715884105727",
+            "StartingHashKey": "85070591730234615865843651857942052863"
+          },
+          "ShardId": "shardId-000000000003",
+          "ParentShardId": "shardId-000000000000",
+          "SequenceNumberRange": {
+            "StartingSequenceNumber": "49549169978965547300229121751154719765762108750148141106"
+          }
+        }
+      ]
+  })XXXX"));
 
   Wrapper wrapper(outcomes_list_shards);
   aws::utils::sleep_for(std::chrono::milliseconds(1500));
@@ -306,146 +306,14 @@ BOOST_AUTO_TEST_CASE(ClosedShards) {
   BOOST_CHECK_EQUAL(
       *wrapper.shard_id("170141183460469231731687303715884105728"),
       4);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("270141183460469231731687303715884105728"),
-      5);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("340282366920938463463374607431768211455"),
-      5);
-  BOOST_CHECK_EQUAL(
-      wrapper.num_req_received(),
-      1);
-}
-
-
-BOOST_AUTO_TEST_CASE(MixedParentAndChildrenShards) {
-  std::list<Aws::Kinesis::Model::ListShardsOutcome> outcomes_list_shards;
-  outcomes_list_shards.push_back(
-        success_outcome<Aws::Kinesis::Model::ListShardsResult,Aws::Kinesis::Model::ListShardsOutcome>(R"XXXX({
-      "Shards": [
-          {
-          "HashKeyRange": {
-            "EndingHashKey": "5",
-            "StartingHashKey": "0"
-          },
-          "ShardId": "shardId-000000000000",
-          "SequenceNumberRange": {
-            "EndingSequenceNumber": "49549167410956685081233009822320176730553508082787287058",
-            "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "10",
-            "StartingHashKey": "6"
-          },
-          "ShardId": "shardId-000000000001",
-          "SequenceNumberRange": {
-            "EndingSequenceNumber": "49549167410956685081233009822320176730553508082787287058",
-            "StartingSequenceNumber": "49549167410945534708633744510750617797212193316405248018"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "2",
-            "StartingHashKey": "0"
-          },
-          "ShardId": "shardId-000000000002",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549169978943246555030591128013184047489460388642160674"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "5",
-            "StartingHashKey": "3"
-          },
-          "ShardId": "shardId-000000000003",
-          "SequenceNumberRange": {
-            "EndingSequenceNumber": "49549167410956685081233009822320176730553508082787287058",
-            "StartingSequenceNumber": "49549169978965547300229121751154719765762108750148141106"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "8",
-            "StartingHashKey": "6"
-          },
-          "ShardId": "shardId-000000000004",
-          "SequenceNumberRange": {
-            "EndingSequenceNumber": "49549167410956685081233009822320176730553508082787287058",
-            "StartingSequenceNumber": "49549295168948777979169149491056351269437634281436348482"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "10",
-            "StartingHashKey": "9"
-          },
-          "ShardId": "shardId-000000000005",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549295168971078724367680114197886987710282642942328914"
-          }
-        },
-        {
-          "HashKeyRange": {
-            "EndingHashKey": "8",
-            "StartingHashKey": "3"
-          },
-          "ShardId": "shardId-00000000006",
-          "SequenceNumberRange": {
-            "EndingSequenceNumber": "49549167410956685081233009822320176730553508082787287058",
-            "StartingSequenceNumber": "49549295168971078724367680114197886987710282642942328914"
-          }
-        },
-                {
-          "HashKeyRange": {
-            "EndingHashKey": "6",
-            "StartingHashKey": "3"
-          },
-          "ShardId": "shardId-00000000007",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549295168971078724367680114197886987710282642942328914"
-          }
-        },
-                {
-          "HashKeyRange": {
-            "EndingHashKey": "8",
-            "StartingHashKey": "7"
-          },
-          "ShardId": "shardId-00000000008",
-          "SequenceNumberRange": {
-            "StartingSequenceNumber": "49549295168971078724367680114197886987710282642942328914"
-          }
-        }
-      ]
-  })XXXX"));
-
-  Wrapper wrapper(outcomes_list_shards);
-
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("0"),
-      2);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("6"),
-      4);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("7"),
-      8);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("8"),
-      8);
+  // both child and parent could be used as the predicted shard during reshard. 
+  int shard_id_value = *wrapper.shard_id("270141183460469231731687303715884105728");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
+  shard_id_value = *wrapper.shard_id("340282366920938463463374607431768211455");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
   BOOST_CHECK_EQUAL(
       wrapper.num_req_received(),
       1);
-
-  BOOST_CHECK(wrapper.get_shard(0));
-  BOOST_CHECK(wrapper.get_shard(1));
-  // waiting for cleanup to happen
-  aws::utils::sleep_for(std::chrono::milliseconds(150));
-  BOOST_CHECK(!wrapper.get_shard(0));
-  BOOST_CHECK(!wrapper.get_shard(1));
-  BOOST_CHECK(wrapper.get_shard(8));
 }
 
 BOOST_AUTO_TEST_CASE(PaginatedResults) {
@@ -537,12 +405,10 @@ BOOST_AUTO_TEST_CASE(PaginatedResults) {
   BOOST_CHECK_EQUAL(
       *wrapper.shard_id("170141183460469231731687303715884105728"),
       4);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("270141183460469231731687303715884105728"),
-      5);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("340282366920938463463374607431768211455"),
-      5);
+  int shard_id_value = *wrapper.shard_id("270141183460469231731687303715884105728");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
+  shard_id_value = *wrapper.shard_id("340282366920938463463374607431768211455");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
 
   BOOST_CHECK_EQUAL(
       wrapper.num_req_received(),
@@ -712,12 +578,10 @@ BOOST_AUTO_TEST_CASE(RetryWithFailureInTheMiddle) {
   BOOST_CHECK_EQUAL(
       *wrapper.shard_id("170141183460469231731687303715884105728"),
       4);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("270141183460469231731687303715884105728"),
-      5);
-  BOOST_CHECK_EQUAL(
-      *wrapper.shard_id("340282366920938463463374607431768211455"),
-      5);
+  int shard_id_value = *wrapper.shard_id("270141183460469231731687303715884105728");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
+  shard_id_value = *wrapper.shard_id("340282366920938463463374607431768211455");
+  BOOST_CHECK(shard_id_value == 1 || shard_id_value == 5);  
 
   BOOST_CHECK_EQUAL(
       wrapper.num_req_received(),

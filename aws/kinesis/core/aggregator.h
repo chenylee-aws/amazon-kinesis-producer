@@ -63,10 +63,12 @@ class Aggregator : boost::noncopyable {
       shard_id = shard_map_->shard_id(ur->hash_key());
     }
     if (!shard_id) {
+      LOG(info) << "record " << ur->source_id() << "hash key" <<ur->hash_key();
       auto kr = std::make_shared<KinesisRecord>();
       kr->add(ur);
       return kr;
     } else {
+      LOG(info) << "record " << ur->source_id() << "hash key" <<ur->hash_key() << "predicted shard" << *shard_id;
       ur->predicted_shard(*shard_id);
       return reducers_[*shard_id].add(ur);
     }

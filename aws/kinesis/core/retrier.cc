@@ -108,6 +108,7 @@ Retrier::handle_put_records_result(std::shared_ptr<PutRecordsContext> prc) {
         //or none did. So we can invalidate just once per kinesis record.
         bool should_invalidate_on_incorrect_shard = true;
         const bool is_aggregated_record = kr->items().size() > 1;
+        auto hashrange_actual_shard = shard_map_get_hashrange_cb_(ShardMap::shard_id_from_str(put_result.GetShardId()));
         for (auto& ur : kr->items()) {  
           should_invalidate_on_incorrect_shard &= succeed_if_correct_shard(ur,
                                    start,
@@ -115,6 +116,7 @@ Retrier::handle_put_records_result(std::shared_ptr<PutRecordsContext> prc) {
                                    put_result.GetShardId(),
                                    put_result.GetSequenceNumber(),
                                    should_invalidate_on_incorrect_shard,
+                                   hashrange_actual_shard,
                                    is_aggregated_record);
         }
       } else {
@@ -197,35 +199,40 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
                                        const std::string& shard_id,                                     
                                        const std::string& sequence_number,
                                        const bool should_invalidate_on_incorrect_shard,
+                                       const boost::optional<std::pair<uint128_t, uint128_t>>& hashrange_actual_shard,
                                        const bool is_aggregated_record) {
   const uint64_t actual_shard = ShardMap::shard_id_from_str(shard_id);
   if (ur->predicted_shard() &&
       *ur->predicted_shard() != actual_shard) {
-    //We should call invalidate only if:
-    // 1. If we are told to invalidate on incorrect shard.
-    if (should_invalidate_on_incorrect_shard) {
-      LOG(warning) << "Record " << ur->source_id() << " went to shard " << actual_shard << " instead of the "
-                   << "predicted shard " << *ur->predicted_shard() << "; this "
-                   << "usually means the sharp map has changed.";   
-
-      shard_map_invalidate_cb_(start, ur->predicted_shard());
-    }
-
+    bool should_invalidate_on_incorrect_hashrange = false;
     // if record is not coming from a aggregated record. When aggregation is off, one user record would map to one kinesis record,
     // and the kinesis record will use the user record's explicit hashkey for it's hashkey as well. So if the kinesis 
     // record ended up in the children shard during scaling it is safe to say the record went into the correct shard.
     if (is_aggregated_record) {
       // this is called here not earlier such that we have better change to find the new shard in the map.
       // retry if shard is not found or hashrange of the user record doesn't fit into the actual shard's hashrange
-      const boost::optional<ShardMap::ShardRange> shard = shard_map_get_shard_cb_(actual_shard);
-      if (!shard || !((*shard).start <= ur->hash_key() && (*shard).end >= ur->hash_key())) {
+      // const boost::optional<ShardMap::ShardRange> shard = shard_map_get_shard_cb_(actual_shard);
+      if (!hashrange_actual_shard || !((*hashrange_actual_shard).first <= ur->hash_key() && 
+          (*hashrange_actual_shard).second >= ur->hash_key())) {
+          invalidate_cache(ur, start, actual_shard, should_invalidate_on_incorrect_shard);
           retry_not_expired(ur,
                             start,
                             end,
                             "Wrong Shard",
-                            "Record did not end up in expected shard.");
-        return false;
+                            "Record " + std::to_string(ur->source_id()) + " did not end up in expected shard.");
+          // invalidate because this is a new shard or shard felt outside of actual shards hashrange. 
+          LOG(info) << "called from hash block";
+          return false;
       } 
+      // child shard is numbered higher than the ancestor. if we landed on a child shard it means the parent shard can
+      // be expired now so we can try to call invalidate.
+      else if (*ur->predicted_shard() < actual_shard ) {
+        invalidate_cache(ur, start, actual_shard, should_invalidate_on_incorrect_shard);
+      }
+    } else {
+      // single record doesn't need to be retried irrespective of whether it has non matching predicted/actual shard
+                LOG(info) << "called from here" ;
+      invalidate_cache(ur, start, actual_shard, should_invalidate_on_incorrect_shard);
     }
   }
   finish_user_record(
@@ -235,6 +242,19 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
           .set_end(end)
           .set_result(shard_id, sequence_number));
   return true;
+}
+
+void Retrier::invalidate_cache(const std::shared_ptr<UserRecord>& ur,
+                                const TimePoint start,
+                                const uint64_t& actual_shard,
+                                bool should_invalidate_on_incorrect_shard) {
+ if (should_invalidate_on_incorrect_shard) {
+      LOG(warning) << "Record " << ur->source_id() << " went to shard " << actual_shard << " instead of the "
+                   << "predicted shard " << *ur->predicted_shard() << "; this "
+                   << "usually means the sharp map has changed.";   
+
+      shard_map_invalidate_cb_(start, ur->predicted_shard());
+    }
 }
 
 void Retrier::finish_user_record(const std::shared_ptr<UserRecord>& ur,

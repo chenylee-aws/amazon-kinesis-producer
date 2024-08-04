@@ -183,6 +183,7 @@ public class SampleConsumer implements IRecordProcessorFactory {
             Collections.sort(sequenceNumbers);
             for (long sn : sequenceNumbers) {
                 if (sn - last > 1) {
+                    System.out.print("diff " + sn + " last " + last);
                     gaps++;
                 }
                 last = sn;
