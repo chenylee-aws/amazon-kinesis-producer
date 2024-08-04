@@ -151,7 +151,7 @@ void ShardMap::list_shards_callback(
       const auto& hashkey_end = uint128_t(range.GetEndingHashKey());
       const auto& shard_id = shard_id_from_str(shard.GetShardId());
       end_hash_key_to_shard_id_.push_back({hashkey_end, shard_id});
-      open_shards_.insert({shard_id, shard});
+      open_shards_.insert({shard_id, shard});      
       shard_id_to_shard_hashkey_cache_.insert({shard_id, {hashkey_start, hashkey_end}});
     }
   }
