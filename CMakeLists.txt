@@ -92,7 +92,9 @@ if(ENABLE_SEGFAULT_TRIGGER)
 endif(ENABLE_SEGFAULT_TRIGGER)
 
 set(TESTS_SOURCE
-    aws/kinesis/core/test/shard_map_test.cc
+    aws/kinesis/core/test/retrier_test.cc
+    aws/kinesis/core/test/test_utils.cc
+    aws/kinesis/core/test/test_utils.h
 )
 
 set(THIRD_PARTY_LIBS third_party/lib)
