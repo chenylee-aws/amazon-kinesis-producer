@@ -97,8 +97,13 @@ public class SampleConsumer implements IRecordProcessorFactory {
      * the data from multiple shards.
      */
     private class RecordProcessor implements IRecordProcessor {
+
+        String shardId;
+        
         @Override
-        public void initialize(String shardId) {}
+        public void initialize(String shardId) {
+            this.shardId = shardId;
+        }
 
         @Override
         public void processRecords(List<Record> records, IRecordProcessorCheckpointer checkpointer) {
@@ -133,10 +138,10 @@ public class SampleConsumer implements IRecordProcessorFactory {
                 }
                 
                 // Only add to the shared list if our data is from the latest run.
+                sequenceNumbers.addAll(seqNos);
                 if (largestTimestamp.get() == timestamp) {
                     sequenceNumbers.addAll(seqNos);
-                    Collections.sort(sequenceNumbers);
-                }
+                } 
             }
             
             try {
@@ -148,7 +153,7 @@ public class SampleConsumer implements IRecordProcessorFactory {
 
         @Override
         public void shutdown(IRecordProcessorCheckpointer checkpointer, ShutdownReason reason) {
-            log.info("Shutting down, reason: " + reason);
+            log.info("Shutting down, reason: " + reason + " " + shardId);
             try {
                 checkpointer.checkpoint();
             } catch (Exception e) {
@@ -175,8 +180,10 @@ public class SampleConsumer implements IRecordProcessorFactory {
             // start counting from one before that, i.e. 0.
             long last = 0;
             long gaps = 0;
+            Collections.sort(sequenceNumbers);
             for (long sn : sequenceNumbers) {
                 if (sn - last > 1) {
+                    System.out.print("diff " + sn + " last " + last);
                     gaps++;
                 }
                 last = sn;
