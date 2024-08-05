@@ -101,8 +101,6 @@ class ShardMap : boost::noncopyable {
   std::string stream_;
   std::string stream_arn_;
   std::shared_ptr<aws::metrics::MetricsManager> metrics_manager_;
-
-  std::thread cleanup_thread_; 
   
   State state_;
   std::vector<std::pair<uint128_t, uint64_t>> end_hash_key_to_shard_id_;

@@ -204,17 +204,19 @@ bool Retrier::succeed_if_correct_shard(const std::shared_ptr<UserRecord>& ur,
     if (!hashrange_actual_shard || !((*hashrange_actual_shard).first <= ur->hash_key() && 
         (*hashrange_actual_shard).second >= ur->hash_key())) {
         invalidate_cache(ur, start, actual_shard, should_invalidate_on_incorrect_shard);
+                LOG(info) << "make herer " << !hashrange_actual_shard  << ur->hash_key();
+
         retry_not_expired(ur,
                           start,
                           end,
                           "Wrong Shard",
                           "Record " + std::to_string(ur->source_id()) + " did not end up in expected shard.");
         // invalidate because this is a new shard or shard felt outside of actual shards hashrange. 
-        LOG(info) << "called from hash block";
+        LOG(info) << "called from hash block " << !hashrange_actual_shard  << ur->hash_key();
         return false;
     } 
     // child shard is numbered higher than the ancestor. if we landed on a child shard it means the parent shard can
-    // be removed now from the in memory map. This will help the shardmap to converge
+    // be removed now from the in-memory map. This will help the shardmap to converge
     else if (*ur->predicted_shard() < actual_shard) {
       LOG(info) << "called from hash else if block " << *ur->predicted_shard() << " < " << actual_shard;
       invalidate_cache(ur, start, actual_shard, should_invalidate_on_incorrect_shard);

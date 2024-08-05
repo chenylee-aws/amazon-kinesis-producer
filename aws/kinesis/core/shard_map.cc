@@ -45,11 +45,10 @@ ShardMap::ShardMap(
       max_backoff_(max_backoff),
       closed_shard_ttl_(closed_shard_ttl),
       backoff_(min_backoff_),
-      list_shards_caller_(list_shards_caller)
-      // cleanup_thread_(std::thread(&ShardMap::cleanup, this)
-     {
+      list_shards_caller_(list_shards_caller) {
   update();
-  // cleanup_thread_.detach();
+  std::thread cleanup_thread_(&ShardMap::cleanup, this);
+  cleanup_thread_.detach();
 }
 
 boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
@@ -194,7 +193,6 @@ void ShardMap::update_fail(const std::string &code, const std::string &msg) {
   backoff_ = std::min(backoff_ * 3 / 2, max_backoff_);
 }
 
-
 void ShardMap::clear_all_stored_shards() {
   end_hash_key_to_shard_id_.clear();
   open_shards_.clear();
@@ -209,6 +207,8 @@ void ShardMap::cleanup() {
   while (true) {
     std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
     auto now = std::chrono::steady_clock::now();   
+    // readlock on the main mutex and the state_ check ensures that we are not runing list shards so not learning new shards
+    // and is safe to clean up the map.
     ReadLock lock(mutex_);
     if (updated_at_ + closed_shard_ttl_ < now && state_ == READY) {
       if (open_shards_.size() != shard_id_to_shard_hashkey_cache_.size()) {

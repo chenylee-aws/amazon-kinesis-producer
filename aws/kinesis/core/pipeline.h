@@ -70,7 +70,6 @@ class Pipeline : boost::noncopyable {
         shard_map_(
             std::make_shared<ShardMap>(
                 executor_,
-                // kinesis_client_,
                 [this](auto& req, auto& handler, auto& context) { kinesis_client_->ListShardsAsync(req, handler, context); },
                 stream_,
                 stream_arn_,
