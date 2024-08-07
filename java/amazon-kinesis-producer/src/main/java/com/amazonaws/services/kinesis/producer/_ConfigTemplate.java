@@ -27,11 +27,12 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.kinesis.producer.protobuf.Config.AdditionalDimension;
 import com.amazonaws.services.kinesis.producer.protobuf.Config.Configuration;
 import com.amazonaws.services.kinesis.producer.protobuf.Messages.Message;
+
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 
 /**
  * Configuration for {@link KinesisProducer}. See each each individual set
@@ -42,8 +43,8 @@ class _ConfigTemplate {
     private static final Logger log = LoggerFactory.getLogger(_ConfigTemplate.class);
 
     private List<AdditionalDimension> additionalDims = new ArrayList<>();
-    private AWSCredentialsProvider credentialsProvider = new DefaultAWSCredentialsProviderChain();
-    private AWSCredentialsProvider metricsCredentialsProvider = null;
+    private AwsCredentialsProvider credentialsProvider = DefaultCredentialsProvider.create();
+    private AwsCredentialsProvider metricsCredentialsProvider = null;
 
    /**
      * Add an additional, custom dimension to the metrics emitted by the KPL.
@@ -93,30 +94,30 @@ class _ConfigTemplate {
     }
     
     /**
-     * {@link AWSCredentialsProvider} that supplies credentials used to put
+     * {@link AwsCredentialsProvider} that supplies credentials used to put
      * records to Kinesis. These credentials will also be used to upload metrics
      * to CloudWatch, unless {@link setMetricsCredentialsProvider} is used to
      * provide separate credentials for that.
      * 
-     * @see #setCredentialsProvider(AWSCredentialsProvider)
+     * @see #setCredentialsProvider(AwsCredentialsProvider)
      */
-    public AWSCredentialsProvider getCredentialsProvider() {
+    public AwsCredentialsProvider getCredentialsProvider() {
         return credentialsProvider;
     }
 
     /**
-     * {@link AWSCredentialsProvider} that supplies credentials used to put
+     * {@link AwsCredentialsProvider} that supplies credentials used to put
      * records to Kinesis.
      * <p>
      * These credentials will also be used to upload metrics
      * to CloudWatch, unless {@link setMetricsCredentialsProvider} is used to
      * provide separate credentials for that.
      * <p>
-     * Defaults to an instance of {@link DefaultAWSCredentialsProviderChain}
+     * Defaults to an instance of {@link DefaultAwsCredentialsProviderChain}
      * 
-     * @see #setMetricsCredentialsProvider(AWSCredentialsProvider)
+     * @see #setMetricsCredentialsProvider(AwsCredentialsProvider)
      */
-    public _ConfigTemplate setCredentialsProvider(AWSCredentialsProvider credentialsProvider) {
+    public _ConfigTemplate setCredentialsProvider(AwsCredentialsProvider credentialsProvider) {
         if (credentialsProvider == null) {
             throw new NullPointerException("credentialsProvider cannot be null");
         }
@@ -125,26 +126,26 @@ class _ConfigTemplate {
     }
 
     /**
-     * {@link AWSCredentialsProvider} that supplies credentials used to upload
+     * {@link AwsCredentialsProvider} that supplies credentials used to upload
      * metrics to CloudWatch. If not given, the credentials used to put records
      * to Kinesis are also used for CloudWatch.
      * 
-     * @see #setMetricsCredentialsProvider(AWSCredentialsProvider)
+     * @see #setMetricsCredentialsProvider(AwsCredentialsProvider)
      */
-    public AWSCredentialsProvider getMetricsCredentialsProvider() {
+    public AwsCredentialsProvider getMetricsCredentialsProvider() {
         return metricsCredentialsProvider;
     }
     
     /**
-     * {@link AWSCredentialsProvider} that supplies credentials used to upload
+     * {@link AwsCredentialsProvider} that supplies credentials used to upload
      * metrics to CloudWatch.
      * <p>
      * If not given, the credentials used to put records
      * to Kinesis are also used for CloudWatch.
      * 
-     * @see #setCredentialsProvider(AWSCredentialsProvider)
+     * @see #setCredentialsProvider(AwsCredentialsProvider)
      */
-    public _ConfigTemplate setMetricsCredentialsProvider(AWSCredentialsProvider metricsCredentialsProvider) {
+    public _ConfigTemplate setMetricsCredentialsProvider(AwsCredentialsProvider metricsCredentialsProvider) {
         this.metricsCredentialsProvider = metricsCredentialsProvider;
         return this;
     }
