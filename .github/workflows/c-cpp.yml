@@ -14,4 +14,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: bootstrap
-      run: ./bootstrap
+      run: |
+        chmod +x bootstrap.sh  # Ensure the script is executable
+        ./bootstrap.sh
