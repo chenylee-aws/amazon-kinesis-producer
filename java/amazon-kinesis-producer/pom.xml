@@ -59,6 +59,7 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- This is used for resolving os.detected.classifier used in maven-protobuf plugin -->
             <plugin>
                 <groupId>kr.motd.maven</groupId>
                 <artifactId>os-maven-plugin</artifactId>
@@ -72,6 +73,7 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Allow generating protobuf classes automatically -->
             <plugin>
                 <groupId>org.xolstice.maven.plugins</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>
