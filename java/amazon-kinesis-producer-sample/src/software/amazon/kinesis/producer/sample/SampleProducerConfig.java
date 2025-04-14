@@ -271,7 +271,7 @@ public class SampleProducerConfig {
         // environment variables to the executable, you can either use a wrapper
         // shell script, or set them for the Java process, which will then pass
         // them on to the child process.
-        // config.setNativeExecutable("my_directory/kinesis_producer");
+         config.setNativeExecutable("/local/tmp/kinesis_producer");
 
         // If you end up using the default configuration (a Configuration instance
         // without any calls to set*), you can just leave the config argument
