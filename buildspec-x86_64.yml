@@ -40,13 +40,12 @@ phases:
       - echo "################################################################################"
       - echo "Starting build phase for Linux/x86_64"
       - echo "################################################################################"
-      - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 056543101242.dkr.ecr.us-west-2.amazonaws.com
       - echo "Getting Docker image for AL2012 build of KPL..."
-      - docker pull 056543101242.dkr.ecr.us-west-2.amazonaws.com/kinesis-producer-library-builder:latest
+      - docker pull public.ecr.aws/amazonlinux/amazonlinux:1
       - ls
       - df -h
       - echo "Building KPL in current directory in the Container..."
-      - docker run --rm -m 15g -v $(pwd):/kpl 056543101242.dkr.ecr.us-west-2.amazonaws.com/kinesis-producer-library-builder:latest /bin/bash -c "export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY && export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID && cd /kpl && ls && ./bootstrap.sh"
+      - docker run --rm -m 15g --privileged -v $(pwd):/kpl public.ecr.aws/amazonlinux/amazonlinux:1 /bin/bash -c "export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID && export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY && yum install -y -q sudo wget cmake3 gcc72 gcc72-c++ make file tar gzip which perl git libuuid libuuid-devel zlib zlib-devel zlib-static perl-CPAN diffutils coreutils && echo | sudo cpan -i -T IPC::Cmd && wget -O /etc/yum.repos.d/corretto.repo https://yum.corretto.aws/corretto.repo && yum install -y -q java-1.8.0-amazon-corretto-devel && mkdir -p /usr/local/maven && wget https://archive.apache.org/dist/maven/maven-3/3.8.7/binaries/apache-maven-3.8.7-bin.tar.gz && tar xvf apache-maven-3.8.7-bin.tar.gz -C /usr/local/maven --strip-components=1 && ln -s /usr/local/maven/bin/mvn /usr/bin/mvn && cd /kpl && ./bootstrap.sh"
       - cd java/amazon-kinesis-producer/src/main/resources/amazon-kinesis-producer-native-binaries/$CODEBUILD_OS_NAME-`uname -m`
       - ls
       - sudo zip kinesis-producer.zip kinesis_producer
