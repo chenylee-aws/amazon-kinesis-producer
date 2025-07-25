@@ -19,6 +19,7 @@
 #include <regex>
 
 #include <boost/noncopyable.hpp>
+#include <boost/optional.hpp>
 
 #include <aws/kinesis/protobuf/messages.pb.h>
 
@@ -134,14 +135,17 @@ class Configuration : private boost::noncopyable {
   // file size soft limit to 128MB, or the hard limit, whichever is lower. If
   // the soft limit is already at or above the target amount, it is not
   // changed.
+  // If set to false, explicitly sets the core file size limit to 0 to disable
+  // core dumps.
+  // If unset, uses environment default.
   //
   // Note that even if the limit is successfully raised (or already
   // sufficient), it does not guarantee that core files will be written on a
   // crash, since that is dependent on operation system settings that's beyond
   // the control of individual processes.
   //
-  // Default: false
-  bool enable_core_dumps() const noexcept {
+  // Default: unset
+  boost::optional<bool> enable_core_dumps() const noexcept {
     return enable_core_dumps_;
   }
 
@@ -1114,7 +1118,9 @@ class Configuration : private boost::noncopyable {
     collection_max_count(c.collection_max_count());
     collection_max_size(c.collection_max_size());
     connect_timeout(c.connect_timeout());
-    enable_core_dumps(c.enable_core_dumps());
+    if (c.has_enable_core_dumps()) {
+      enable_core_dumps(c.enable_core_dumps());
+    }
     fail_if_throttled(c.fail_if_throttled());
     kinesis_endpoint(c.kinesis_endpoint());
     kinesis_port(c.kinesis_port());
@@ -1162,7 +1168,7 @@ class Configuration : private boost::noncopyable {
   size_t collection_max_count_ = 500;
   size_t collection_max_size_ = 5242880;
   uint64_t connect_timeout_ = 6000;
-  bool enable_core_dumps_ = false;
+  boost::optional<bool> enable_core_dumps_;
   bool fail_if_throttled_ = false;
   std::string kinesis_endpoint_ = "";
   size_t kinesis_port_ = 443;

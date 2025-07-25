@@ -358,7 +358,7 @@ public class KinesisProducerConfiguration {
     private long collectionMaxSize = 5242880L;
     private long connectTimeout = 6000L;
     private long credentialsRefreshDelay = 5000L;
-    private boolean enableCoreDumps = false;
+    private Boolean enableCoreDumps = null;
     private boolean failIfThrottled = false;
     private String kinesisEndpoint = "";
     private long kinesisPort = 443L;
@@ -530,15 +530,17 @@ public class KinesisProducerConfiguration {
      * If set to true, the KPL native process will attempt to raise its own core file size soft
      * limit to 128MB, or the hard limit, whichever is lower. If the soft limit is already at or
      * above the target amount, it is not changed.
-     * 
+     * If set to false, explicitly sets the core file size limit to 0 to disable ore dumps.
+     * If unset, uses environment default.
+     *
      * <p>
      * Note that even if the limit is successfully raised (or already sufficient), it does not
      * guarantee that core files will be written on a crash, since that is dependent on operation
      * system settings that's beyond the control of individual processes.
-     * 
-     * <p><b>Default</b>: false
+     *
+     * <p><b>Default</b>: unset
      */
-    public boolean isEnableCoreDumps() {
+    public Boolean isEnableCoreDumps() {
       return enableCoreDumps;
     }
 
