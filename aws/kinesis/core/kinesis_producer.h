@@ -111,6 +111,7 @@ class KinesisProducer : boost::noncopyable {
 
   aws::utils::ConcurrentHashMap<std::string, Pipeline> pipelines_;
   bool shutdown_;
+  std::atomic<bool> paused_{false};
   aws::thread message_drainer_;
 
   std::shared_ptr<aws::utils::ScheduledCallback> report_outstanding_;
