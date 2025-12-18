@@ -233,6 +233,9 @@ void KinesisProducer::drain_messages() {
       std::vector<std::string> batch;
       std::swap(batch, buf);
       executor_->submit([batch = std::move(batch), this]() mutable {
+        while (paused_.load()) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
         for (auto& s : batch) {
           this->on_ipc_message(std::move(s));
         }
@@ -287,6 +290,12 @@ void KinesisProducer::on_metrics_request(
     const aws::kinesis::protobuf::Message& m) {
   auto req = m.metrics_request();
   std::vector<std::shared_ptr<aws::metrics::Metric>> metrics;
+
+  // Block all threads if metrics name is "Pause"
+  if (req.has_name() && req.name() == "Pause") {
+    paused_.store(true);
+    return;
+  }
 
   // filter by name, if necessary
   if (req.has_name()) {
