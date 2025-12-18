@@ -391,6 +391,7 @@ public class KinesisProducerConfiguration {
     private long userRecordTimeoutInMillis = 0;
     private boolean enableOldestFutureTracker = true; // default on
     private boolean returnUserRecordOnFailure = false;
+    private boolean enableDaemonHealthCheck = false;
 
     /**
      * Enable aggregation. With aggregation, multiple user records are packed into a single
@@ -995,6 +996,19 @@ public class KinesisProducerConfiguration {
      */
     public boolean getReturnUserRecordOnFailure() {
         return returnUserRecordOnFailure;
+    }
+
+    /**
+     * Returns whether daemon health check is enabled.
+     *
+     * <p>
+     * When enabled, the KPL will perform periodic health checks on the native daemon process
+     * to detect potential issues early and take corrective action if needed.
+     *
+     * @return true if daemon health check is enabled, false otherwise
+     */
+    public boolean getEnableDaemonHealthCheck() {
+        return enableDaemonHealthCheck;
     }
 
     /**
@@ -1749,6 +1763,21 @@ public class KinesisProducerConfiguration {
      */
     public KinesisProducerConfiguration setReturnUserRecordOnFailure(boolean returnUserRecordOnFailure) {
         this.returnUserRecordOnFailure = returnUserRecordOnFailure;
+        return this;
+    }
+
+    /**
+     * Sets whether daemon health check is enabled.
+     *
+     * <p>
+     * When enabled, the KPL will perform periodic health checks on the native daemon process
+     * to detect potential issues early and take corrective action if needed.
+     *
+     * @param enableDaemonHealthCheck true to enable daemon health check, false to disable (default false)
+     * @return this {@link KinesisProducerConfiguration} instance
+     */
+    public KinesisProducerConfiguration setEnableDaemonHealthCheck(boolean enableDaemonHealthCheck) {
+        this.enableDaemonHealthCheck = enableDaemonHealthCheck;
         return this;
     }
 

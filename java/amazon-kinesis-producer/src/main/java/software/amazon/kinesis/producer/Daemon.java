@@ -95,7 +95,7 @@ public class Daemon {
     private final String workingDir;
     private final KinesisProducerConfiguration config;
     private final Map<String, String> environmentVariables;
-    
+
     /**
      * Starts up the child process, connects to it, and beings sending and
      * receiving messages.
