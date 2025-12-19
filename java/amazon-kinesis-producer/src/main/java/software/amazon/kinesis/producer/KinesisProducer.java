@@ -709,22 +709,10 @@ public class KinesisProducer implements IKinesisProducer {
         }
 
         long id = messageNumber.getAndIncrement();
-        SettableFuture<UserRecordResult> f = SettableFuture.create();
-        FutureTask<String> task = null;
-        if(config.getUserRecordTimeoutInMillis() > 0) {
-            task = new FutureTask(new FutureTimeoutRunnableTask(id), "TimedOut");
-            futureTimeoutExecutor.schedule(task, config.getUserRecordTimeoutInMillis(), TimeUnit.MILLISECONDS);
-        }
         UserRecord userRecord = null;
         if (config.getReturnUserRecordOnFailure()) {
             ByteBuffer deepCopyOfData = data != null ? ByteString.copyFrom(data.duplicate()).asReadOnlyByteBuffer() : null;
             userRecord = new UserRecord(stream, partitionKey, explicitHashKey, deepCopyOfData, schema);
-        }
-        SettableFutureTracker futuresTracking = new SettableFutureTracker(f, Instant.now(), Optional.ofNullable(task),
-                userRecord);
-        futures.put(id, futuresTracking);
-        if (config.getEnableOldestFutureTracker()) {
-            oldestFutureTrackerHeap.add(futuresTracking);
         }
         PutRecord.Builder pr = PutRecord.newBuilder()
                 .setStreamName(stream)
@@ -739,6 +727,19 @@ public class KinesisProducer implements IKinesisProducer {
                 .setPutRecord(pr.build())
                 .build();
         addMessageToChild(m);
+
+        SettableFuture<UserRecordResult> f = SettableFuture.create();
+        FutureTask<String> task = null;
+        if(config.getUserRecordTimeoutInMillis() > 0) {
+            task = new FutureTask(new FutureTimeoutRunnableTask(id), "TimedOut");
+            futureTimeoutExecutor.schedule(task, config.getUserRecordTimeoutInMillis(), TimeUnit.MILLISECONDS);
+        }
+        SettableFutureTracker futuresTracking = new SettableFutureTracker(f, Instant.now(), Optional.ofNullable(task),
+                userRecord);
+        futures.put(id, futuresTracking);
+        if (config.getEnableOldestFutureTracker()) {
+            oldestFutureTrackerHeap.add(futuresTracking);
+        }
         return f;
     }
 
@@ -844,6 +845,11 @@ public class KinesisProducer implements IKinesisProducer {
             mrb.setSeconds(windowSeconds);
         }
         long id = messageNumber.getAndIncrement();
+        addMessageToChild(Message.newBuilder()
+                .setId(id)
+                .setMetricsRequest(mrb.build())
+                .build());
+
         SettableFuture<List<Metric>> f = SettableFuture.create();
         FutureTask<String> task = null;
         if (config.getUserRecordTimeoutInMillis() > 0 && !isHealthCheck) {
@@ -856,11 +862,6 @@ public class KinesisProducer implements IKinesisProducer {
         if (config.getEnableOldestFutureTracker() && !isHealthCheck) {
             oldestFutureTrackerHeap.add(futuresTracking);
         }
-        addMessageToChild(Message.newBuilder()
-                .setId(id)
-                .setMetricsRequest(mrb.build())
-                .build());
-
         return f;
     }
 
