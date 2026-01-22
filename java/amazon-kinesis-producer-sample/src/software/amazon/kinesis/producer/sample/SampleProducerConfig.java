@@ -121,7 +121,7 @@ public class SampleProducerConfig {
         secondsToRun = getIntArgIfPresent(args, argIndex++, String.valueOf(SECONDS_TO_RUN_DEFAULT));
         recordsPerSecond = getIntArgIfPresent(args, argIndex++, String.valueOf(RECORDS_PER_SECOND_DEFAULT));
         dataSize = getIntArgIfPresent(args, argIndex++, String.valueOf(DATA_SIZE_DEFAULT));
-        connections = getIntArgIfPresent(args, argIndex++, String.valueOf(1));
+        connections = getIntArgIfPresent(args, argIndex++, String.valueOf(10));
         requestTimeout = getIntArgIfPresent(args, argIndex++, String.valueOf(60000));
         bufferTime = getIntArgIfPresent(args, argIndex++, String.valueOf(2000));
         threadingModel = getArgIfPresent(args, argIndex++, KinesisProducerConfiguration.ThreadingModel.PER_REQUEST.name());
@@ -215,7 +215,7 @@ public class SampleProducerConfig {
 
         // Stores the UserRecord associated with an addUserRecord call in the future. The UserRecord
         // will be returned in the exception.
-        config.setReturnUserRecordOnFailure(true);
+        config.setReturnUserRecordOnFailure(false);
 
         // You can also load config from file. A sample properties file is
         // included in the project folder.
