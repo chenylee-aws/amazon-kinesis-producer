@@ -211,33 +211,35 @@ public class KinesisProducer implements IKinesisProducer {
                 log.error("Error in child process", t);
             }
 
-            // Fail all outstanding futures
-            for (final Map.Entry<Long, SettableFutureTracker> entry : futures.entrySet()) {
-                callbackCompletionExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        entry.getValue().getFuture().setException(
-                                new KinesisProducerException(t, entry.getValue().getUserRecord()));
-                    }
-                });
-            }
-            futures.clear();
-            if (config.getEnableOldestFutureTracker()) {
-                oldestFutureTrackerHeap.clear();
-            }
+            // Fail all outstanding futures and restart daemon atomically
+            synchronized (futures) {
+                for (final Map.Entry<Long, SettableFutureTracker> entry : futures.entrySet()) {
+                    callbackCompletionExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            entry.getValue().getFuture().setException(
+                                    new KinesisProducerException(t, entry.getValue().getUserRecord()));
+                        }
+                    });
+                }
+                futures.clear();
+                if (config.getEnableOldestFutureTracker()) {
+                    oldestFutureTrackerHeap.clear();
+                }
 
-            if (processFailureBehavior == ProcessFailureBehavior.AutoRestart && !destroyed) {
-                log.info("Restarting native producer process.");
-                lastChild = System.nanoTime();
-                child = new Daemon(pathToExecutable, new MessageHandler(), pathToTmpDir, config, env);
-            } else {
-                // Only restart child if it's not an irrecoverable error, and if
-                // there has been some time (3 seconds) between the last child
-                // creation. If the child process crashes almost immediately, we're
-                // going to abort to avoid going into a loop.
-                if (!(t instanceof IrrecoverableError) && System.nanoTime() - lastChild > 3e9) {
+                if (processFailureBehavior == ProcessFailureBehavior.AutoRestart && !destroyed) {
+                    log.info("Restarting native producer process.");
                     lastChild = System.nanoTime();
                     child = new Daemon(pathToExecutable, new MessageHandler(), pathToTmpDir, config, env);
+                } else {
+                    // Only restart child if it's not an irrecoverable error, and if
+                    // there has been some time (3 seconds) between the last child
+                    // creation. If the child process crashes almost immediately, we're
+                    // going to abort to avoid going into a loop.
+                    if (!(t instanceof IrrecoverableError) && System.nanoTime() - lastChild > 3e9) {
+                        lastChild = System.nanoTime();
+                        child = new Daemon(pathToExecutable, new MessageHandler(), pathToTmpDir, config, env);
+                    }
                 }
             }
         }
@@ -722,9 +724,11 @@ public class KinesisProducer implements IKinesisProducer {
         }
         SettableFutureTracker futuresTracking = new SettableFutureTracker(f, Instant.now(), Optional.ofNullable(task),
                 userRecord);
-        futures.put(id, futuresTracking);
-        if (config.getEnableOldestFutureTracker()) {
-            oldestFutureTrackerHeap.add(futuresTracking);
+        synchronized (futures) {
+            futures.put(id, futuresTracking);
+            if (config.getEnableOldestFutureTracker()) {
+                oldestFutureTrackerHeap.add(futuresTracking);
+            }
         }
         PutRecord.Builder pr = PutRecord.newBuilder()
                 .setStreamName(stream)
@@ -851,10 +855,12 @@ public class KinesisProducer implements IKinesisProducer {
             futureTimeoutExecutor.schedule(task, config.getUserRecordTimeoutInMillis(), TimeUnit.MILLISECONDS);
         }
         SettableFutureTracker futuresTracking = new SettableFutureTracker(f, Instant.now(), Optional.ofNullable(task), null);
-        futures.put(id, futuresTracking);
+        synchronized (futures) {
+            futures.put(id, futuresTracking);
 
-        if (config.getEnableOldestFutureTracker() && !isHealthCheck) {
-            oldestFutureTrackerHeap.add(futuresTracking);
+            if (config.getEnableOldestFutureTracker() && !isHealthCheck) {
+                oldestFutureTrackerHeap.add(futuresTracking);
+            }
         }
         addMessageToChild(Message.newBuilder()
                 .setId(id)
