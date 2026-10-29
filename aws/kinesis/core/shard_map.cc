@@ -48,8 +48,6 @@ ShardMap::ShardMap(
       backoff_(min_backoff_),
       list_shards_callback_(list_shards_callback) {
   update();
-  std::thread cleanup_thread_(&ShardMap::cleanup, this);
-  cleanup_thread_.detach();
 }
 
 boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
@@ -74,6 +72,7 @@ boost::optional<uint64_t> ShardMap::shard_id(const uint128_t& hash_key) {
 }
 
 boost::optional<std::pair<ShardMap::uint128_t, ShardMap::uint128_t>> ShardMap::hashrange(const uint64_t& shard_id) {
+  maybe_prune_closed_shards();
   ReadLock lock(shard_cache_mutex_);
   const auto& it = shard_id_to_shard_hashkey_cache_.find(shard_id);
   if (it != shard_id_to_shard_hashkey_cache_.end()) {
@@ -208,31 +207,40 @@ void ShardMap::sort_all_open_shards() {
           end_hash_key_to_shard_id_.end());
 }
 
-void ShardMap::cleanup() {
-  while (true) {
-    try {
-      std::this_thread::sleep_for(closed_shard_ttl_ / 2); 
-      const auto now = std::chrono::steady_clock::now();   
-      // readlock on the main mutex and the state_ check ensures that we are not runing list shards so it's safe to
-      // clean up the map.
-      ReadLock lock(mutex_);
-      // if it's been a while since the last shardmap update, we can remove the unused closed shards.
-      if (updated_at_ + closed_shard_ttl_ < now && state_ == READY) {
-        if (open_shards_.size() != shard_id_to_shard_hashkey_cache_.size()) {
-          WriteLock lock(shard_cache_mutex_);
-          for (auto it = shard_id_to_shard_hashkey_cache_.begin(); it != shard_id_to_shard_hashkey_cache_.end();) {
-            if (open_shards_.count(it->first) == 0) {
-              it = shard_id_to_shard_hashkey_cache_.erase(it);
-            } else {
-              ++it;
-            }
-          }
-        } 
-      }
-    } catch (const std::exception &e) {
-      LOG(error) << "Exception occurred while cleaning up shardmap cache : " << e.what();
-    } catch (...) {
-      LOG(error) << "Unknown exception while cleaning up shardmap cache.";
+void ShardMap::maybe_prune_closed_shards() {
+  const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+  auto next = next_prune_check_.load(std::memory_order_relaxed);
+  if (now < next) {
+    return;
+  }
+  const auto interval =
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+          closed_shard_ttl_ / 2).count();
+  // Only the thread that wins the exchange prunes; the others carry on.
+  if (!next_prune_check_.compare_exchange_strong(next, now + interval)) {
+    return;
+  }
+  prune_closed_shards();
+}
+
+void ShardMap::prune_closed_shards() {
+  const auto now = std::chrono::steady_clock::now();
+  // readlock on the main mutex and the state_ check ensures that we are not runing list shards so it's safe to
+  // clean up the map.
+  ReadLock lock(mutex_);
+  // if it's been a while since the last shardmap update, we can remove the unused closed shards.
+  if (updated_at_ + closed_shard_ttl_ >= now || state_ != READY) {
+    return;
+  }
+  if (open_shards_.size() == shard_id_to_shard_hashkey_cache_.size()) {
+    return;
+  }
+  WriteLock cache_lock(shard_cache_mutex_);
+  for (auto it = shard_id_to_shard_hashkey_cache_.begin(); it != shard_id_to_shard_hashkey_cache_.end();) {
+    if (open_shards_.count(it->first) == 0) {
+      it = shard_id_to_shard_hashkey_cache_.erase(it);
+    } else {
+      ++it;
     }
   }
 }

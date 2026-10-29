@@ -26,6 +26,7 @@
 #include <aws/metrics/metrics_manager.h>
 #include <aws/mutex.h>
 #include <aws/utils/utils.h>
+#include <atomic>
 #include <thread>
 
 namespace aws {
@@ -97,7 +98,11 @@ class ShardMap : boost::noncopyable {
 
   void clear_all_stored_shards();
   void sort_all_open_shards();
-  void cleanup();
+  // Removes closed shards from the hashrange cache once closed_shard_ttl_ has
+  // passed since the last update. Checked at most once per closed_shard_ttl_ / 2,
+  // from hashrange() rather than a background thread.
+  void maybe_prune_closed_shards();
+  void prune_closed_shards();
 
   std::shared_ptr<aws::utils::Executor> executor_;
   std::string stream_;
@@ -118,6 +123,8 @@ class ShardMap : boost::noncopyable {
   std::chrono::milliseconds closed_shard_ttl_;
   std::shared_ptr<aws::utils::ScheduledCallback> scheduled_callback_;
   ListShardsCallBack list_shards_callback_;
+  // steady_clock ticks; 0 means "check on the next call".
+  std::atomic<std::chrono::steady_clock::rep> next_prune_check_{0};
 };
 
 } //namespace core
