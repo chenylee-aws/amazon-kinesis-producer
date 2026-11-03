@@ -1,5 +1,10 @@
 ## Changelog
 
+## 0.15.14
+Internal release only, after the KPL 0.x end of support.
+* [#715](https://github.com/awslabs/amazon-kinesis-producer/pull/715) Retry whole aggregate when a sub-record lands on the wrong shard
+* [#720](https://github.com/awslabs/amazon-kinesis-producer/pull/720) Use std::mutex for metrics accumulators
+
 ## 0.15.12
 * [#593](https://github.com/awslabs/amazon-kinesis-producer/pull/593) Replace all usage of sys_siglist with strsignal as sys_siglist is deprecated
 * [#594](https://github.com/awslabs/amazon-kinesis-producer/pull/594) Check if dimension.value is blank before using it in metrics manager
