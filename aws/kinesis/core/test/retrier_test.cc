@@ -561,7 +561,6 @@ BOOST_AUTO_TEST_CASE(WrongShardMixedHashrange_RetriesWholeAggregate) {
   auto ctx = std::make_shared<aws::kinesis::core::PutRecordsContext>(
       "myStream",
       "arn:aws:kinesis:us-east-2:123456789012:stream/myStream",
-      "",
       krs);
   ctx->set_outcome(success_outcome(R"(
       {
@@ -615,7 +614,6 @@ BOOST_AUTO_TEST_CASE(InRangeLandedOnChildShard_SucceedsAndInvalidatesOnce) {
   auto ctx = std::make_shared<aws::kinesis::core::PutRecordsContext>(
       "myStream",
       "arn:aws:kinesis:us-east-2:123456789012:stream/myStream",
-      "",
       krs);
   ctx->set_outcome(success_outcome(R"(
       {
@@ -668,7 +666,6 @@ BOOST_AUTO_TEST_CASE(InRangePredictedHigherThanActual_SucceedsNoInvalidate) {
   auto ctx = std::make_shared<aws::kinesis::core::PutRecordsContext>(
       "myStream",
       "arn:aws:kinesis:us-east-2:123456789012:stream/myStream",
-      "",
       krs);
   ctx->set_outcome(success_outcome(R"(
       {
