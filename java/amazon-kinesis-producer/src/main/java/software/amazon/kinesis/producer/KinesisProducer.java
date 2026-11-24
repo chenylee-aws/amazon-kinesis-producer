@@ -1387,7 +1387,11 @@ public class KinesisProducer implements IKinesisProducer {
             if (tmpDir.trim().length() == 0) {
                 tmpDir = System.getProperty("java.io.tmpdir");
             }
-            tmpDir = Paths.get(tmpDir, root).toString();
+            try {
+                tmpDir = PrivateTempDirectory.prepare(Paths.get(tmpDir), root).toString();
+            } catch (IOException e) {
+                throw new RuntimeException("Could not prepare temp directory under " + tmpDir, e);
+            }
             pathToTmpDir = tmpDir;
             
             String binPath = config.getNativeExecutable();
@@ -1413,9 +1417,6 @@ public class KinesisProducer implements IKinesisProducer {
                 log.info("Extracting binaries to " + tmpDir);
                 try {
                     File tmpDirFile = new File(tmpDir);
-                    if (!tmpDirFile.exists() && !tmpDirFile.mkdirs()) {
-                        throw new IOException("Could not create tmp dir " + tmpDir);
-                    }
                     
                     String extension = os.equals("windows") ? ".exe" : "";
                     String executableName = "kinesis_producer" + extension;
