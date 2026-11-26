@@ -17,6 +17,7 @@
 #define AWS_UTILS_CONCURRENT_LINKED_QUEUE_H_
 
 #include <list>
+#include <mutex>
 
 #include <aws/mutex.h>
 #include <aws/utils/spin_lock.h>
@@ -24,7 +25,7 @@
 namespace aws {
 namespace utils {
 
-template <typename T>
+template <typename T, typename Mutex = aws::utils::TicketSpinLock>
 class ConcurrentLinkedQueue {
  public:
   template <typename U>
@@ -45,7 +46,6 @@ class ConcurrentLinkedQueue {
   }
 
  private:
-  using Mutex = aws::utils::TicketSpinLock;
   using Lock = aws::lock_guard<Mutex>;
 
   Mutex mutex_;

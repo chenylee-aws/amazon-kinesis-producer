@@ -39,7 +39,9 @@ namespace detail {
 
 static constexpr const size_t kBufferSize = 2 * kMaxMessageSize;
 using len_t = uint32_t;
-using IpcMessageQueue = aws::utils::ConcurrentLinkedQueue<std::string>;
+// std::mutex: TicketSpinLock hands off in strict order and stalls when many
+// threads post results at once.
+using IpcMessageQueue = aws::utils::ConcurrentLinkedQueue<std::string, std::mutex>;
 
 template <typename StreamDescriptor,
           typename NativeHandle,
